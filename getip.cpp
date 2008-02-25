@@ -1,5 +1,5 @@
 #include <iostream>
-#include <stdlib.h>
+#include <cstdlib>
 #include <errno.h>
 #include <netdb.h>
 #include <sys/types.h>
