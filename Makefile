@@ -1,3 +1,6 @@
+selectserver: selectserver.cpp
+	g++ -Wall selectserver.cpp -o selectserver
+
 select: select.cpp
 	g++ -Wall select.cpp -o select
 

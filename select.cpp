@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
 	select(0 + 1, &readfds, NULL, NULL, &tv);
 
 	if (FD_ISSET(0, &readfds))
-		out << "A key was pressed." << endl;
+		cout << "A key was pressed." << endl;
 	else
 		cout << "Timed out." << endl;
 
