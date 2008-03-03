@@ -7,7 +7,7 @@
 using namespace std;
 
 #include <iostream>
-#include <fstream>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -23,10 +23,11 @@ const short LocalPort = 6462;
 static char buf[1024];
 static int listener;
 
-void sendPage(int, istream&);
+void sendPage(int, const char*);
 void send404(int);
 int sendall(int, char*, int&);
 void setuplistener();
+bool canOpen(char*);
 
 int main(int argc, char *argv[]) {
 	setuplistener();
@@ -76,14 +77,13 @@ int main(int argc, char *argv[]) {
 							for (j = 0; buf[4 + j] && (buf[4 + j] != ' '); ++j)
 								filename[j + 1] = buf[4 + j];
 							filename[j + 1] = 0;
-							ifstream page(filename);
 
-							if (!page.good()) {
+							if ((j == 1) || !canOpen(filename)) {
 								send404(i);
 								close(i);
 								FD_CLR(i, &master);
 							} else {
-								sendPage(i, page);
+								sendPage(i, filename);
 								close(i);
 								FD_CLR(i, &master);
 							}
@@ -107,25 +107,53 @@ void inline trySendall(int s, char *buf, int &len) {
 	}
 }
 
-void sendPage(int s, istream &is) {
-	cerr << "dissemina: sending requested page" << endl;
+bool endsWith(const char *s, const char *w) {
+	int lens = strlen(s);
+	int lenw = strlen(w);
 
-	char header[] = "HTTP/1.1 200 OK\r\n"
-					"Connection: close\r\n"
-					"Content-Type: text/html\r\n"
-					"Server: Dissemina/0.0.0\r\n"
-					"\r\n";
+	for (int i(0); i < lenw; ++i)
+		if (s[lens - lenw + i] != w[i])
+			return false;
+	
+	return true;
+}
+
+void sendPage(int s, const char *fn) {
+	FILE *fi;
+	char conttype[32];
+	if (endsWith(fn, ".txt") || endsWith(fn, ".cpp")) {
+		fi = fopen(fn, "r");
+		cerr << "dissemina: sending text file" << endl;
+		strcpy(conttype, "text/plain");
+	} else if (endsWith(fn, ".html") || (endsWith(fn, ".xml"))) {
+		fi = fopen(fn, "r");
+		cerr << "dissemina: sending html page" << endl;
+		strcpy(conttype, "text/html");
+	} else {
+		fi = fopen(fn, "rb");
+		cerr << "dissemina: sending binary file" << endl;
+		strcpy(conttype, "application/octet-stream");
+	}
+
+	char header[256];
+	sprintf(header , "HTTP/1.1 200 OK\r\n"
+					 "Connection: close\r\n"
+					 "Content-Type: %s\r\n"
+					 "Server: Dissemina/0.0.0\r\n"
+					 "\r\n", conttype);
 	int len = strlen(header);
 	trySendall(s, header, len);
 
 	char buf[1025];
-	while (!is.eof()) {
-		is.getline(buf, 1024);
-		len = strlen(buf);
-		buf[len++] = '\n';
-		buf[len] = 0;
+	while (!feof(fi) && !ferror(fi)) {
+		len = fread(buf, 1, 1024, fi);
 		trySendall(s, buf, len);
 	}
+}
+
+bool canOpen(char *fn) {
+	FILE *fi = fopen(fn, "r");
+	return (fi != 0);
 }
 
 void send404(int s) {
