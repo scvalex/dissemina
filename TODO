@@ -1,0 +1,20 @@
+BUGS
+====
+
+Requesting the root of any directory but the root returns a Page Not
+Found error. It should return the index.xml file.
+  
+Siege reports that avalability was 100% during the siege even though
+accept() was spewing out Too Many Open Files errors. This is, most likely,
+an error. Probably something to do with the way 404 errors are sent.
+
+Accept() has problems with many files. See above. Use this to your
+advantage.
+
+No security is present. The browser could easily request any file
+that the server has access to. I should implement some better path
+manipulation routines.
+
+Is it possible for a file be openable for reading ("r"), but not for
+binary reading ("rb")? If so, I have a problem.
+

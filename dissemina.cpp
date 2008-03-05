@@ -22,18 +22,20 @@ using namespace std;
 
 const short LocalPort = 6462;
 
-static char buf[1024];
-static int listener;
+char buf[1024];
+int listener;
 
 char* getCurrentTime() {
 	time_t t = time(0);
-	return ctime(&t);
+	static char tmp[26];
+	ctime_r(&t, tmp);
+	tmp[strlen(tmp)-1] = 0;
+	return tmp;
 }
 
-void warn(const char *w) {
-	if (DEBUG)
-		cerr << getCurrentTime() << w << endl;
-}
+#define warn(a) if (DEBUG) cerr << "dissemina: " << getCurrentTime() << " - " << a << endl
+#define warn3(a, b, c) if (DEBUG) cerr << "dissemina: " << getCurrentTime() << " - " << a << b << c << endl
+#define warn4(a, b, c, d) if (DEBUG) cerr << "dissemina: " << getCurrentTime() << " - " << a << b << c << d << endl
 
 int sendall(int s, const char *buf, int &len) {
 	int total(0),
@@ -72,22 +74,28 @@ bool endsWith(const char *s, const char *w) {
 	return (j < 0);
 }
 
+const int FileHandleNum = 5;
+const char *FileHandle[FileHandleNum][4] = {
+	{"", "rb", "sending binary file", "application/octet-stream"},
+	{".txt", "r", "sending text file", "text/plain"},
+	{".cpp", "r", "sending text file", "text/plain"},
+	{".html", "r", "sending html page", "text/html"},
+	{".xml", "r", "sending html page", "text/html"}
+};
+
 void sendPage(int s, const char *fn) {
 	FILE *fi;
 	char conttype[32];
-	if (endsWith(fn, ".txt") || endsWith(fn, ".cpp")) {
-		fi = fopen(fn, "r");
-		warn("dissemina: sending text file");
-		strcpy(conttype, "text/plain");
-	} else if (endsWith(fn, ".html") || (endsWith(fn, ".xml"))) {
-		fi = fopen(fn, "r");
-		warn("dissemina: sending html page");
-		strcpy(conttype, "text/html");
-	} else {
-		fi = fopen(fn, "rb");
-		warn("dissemina: sending binary file");
-		strcpy(conttype, "application/octet-stream");
-	}
+	int fh(0);
+	for (int i(1); i < FileHandleNum; ++i)
+		if (endsWith(fn, FileHandle[i][0])) {
+			fh = i;
+			break;
+		}
+	
+	fi = fopen(fn, FileHandle[fh][1]);
+	warn(FileHandle[fh][2]);
+	strcpy(conttype, FileHandle[fh][3]);
 
 	char header[256];
 	sprintf(header , "HTTP/1.1 200 OK\r\n"
@@ -111,8 +119,8 @@ bool canOpen(char *fn) {
 }
 
 void send404(int s) {
-	warn("dissemina: problem reading requested file");
-	warn("dissemina: sending 404 Not Found");
+	warn("problem reading requested file");
+	warn("sending 404 Not Found");
 
 	char text404[] = "HTTP/1.1 404 Not Found\r\n"
 					 "Connection: close\r\n"
@@ -150,8 +158,9 @@ void setuplistener() {
 		perror("listen");
 		exit(1);
 	}
-	cerr << "dissemina: *** listening on port " << LocalPort << " ***" << endl;
+	warn3("*** listening on port ", LocalPort, " ***");
 }
+
 int main(int argc, char *argv[]) {
 	setuplistener();
 
@@ -180,13 +189,13 @@ int main(int argc, char *argv[]) {
 						FD_SET(newfd, &master);
 						if (newfd > maxfd)
 							maxfd = newfd;
-						//cerr << "dissemina: connection from " << inet_ntoa(remoteaddr.sin_addr) << " on socket " << newfd << endl;
+						warn4("connection from ", inet_ntoa(remoteaddr.sin_addr), " on socket ", newfd);
 					}
 				} else {
 					int nbytes;
 					if ((nbytes = recv(i, buf, sizeof(buf), 0)) <= 0) {
 						if (nbytes == 0)
-							cerr << "listen: socket " << i << " closed" << endl;
+							warn3("listen: socket ", i, " closed");
 						else
 							perror("recv");
 						close(i);
@@ -201,12 +210,11 @@ int main(int argc, char *argv[]) {
 								filename[j + 1] = buf[4 + j];
 							filename[j + 1] = 0;
 
-							if ((j == 1) && (filename[1] == '/')) {
-								//cerr << "dissemina: root requested" << endl;
+							if ((j == 1) && (filename[1] == '/'))
 								strcpy(filename, "./index.xml");
-							}
 
 							if (!canOpen(filename)) {
+								warn3("can't find ``", filename, "''");
 								send404(i);
 								close(i);
 								FD_CLR(i, &master);
