@@ -5,6 +5,7 @@
  */
 
 #define DEBUG 1
+const int MAXURISIZE = 1024;
 
 using namespace std;
 
@@ -74,13 +75,43 @@ bool endsWith(const char *s, const char *w) {
 	return (j < 0);
 }
 
+bool startsWith(const char *s, const char *w) {
+	char *a = (char*)s,
+		 *b = (char*)w;
+
+	while (*a && *b && (*a == *b))
+		++a,
+		++b;
+
+	return (!*a || !*b);
+}
+
+int getRequestUri(char *uri, char *buf) {
+	char *a = buf;
+	for (; *a == ' '; ++a);
+
+	if (*a != '/')
+		return -1;
+
+	uri[0] = '.';
+	int j;
+	for (j = 0; *a && !isspace(*a) && (j < MAXURISIZE - 2); ++j, ++a)
+		uri[j + 1] = *a;
+	uri[j + 1] = 0;
+
+	if ((j == 1) && (uri[1] == '/'))
+		strcpy(uri, "./index.xml");
+
+	return 0;
+}
+
 const int FileHandleNum = 5;
 const char *FileHandle[FileHandleNum][4] = {
 	{"", "rb", "sending binary file", "application/octet-stream"},
 	{".txt", "r", "sending text file", "text/plain"},
-	{".cpp", "r", "sending text file", "text/plain"},
+	{".cpp", "r", "sending text file", "text/plain"}, // should be text/x-c++src but FF refuses to open them
 	{".html", "r", "sending html page", "text/html"},
-	{".xml", "r", "sending html page", "text/html"}
+	{".xml", "r", "sending xml document", "application/xml"}
 };
 
 void sendPage(int s, const char *fn) {
@@ -115,7 +146,20 @@ void sendPage(int s, const char *fn) {
 
 bool canOpen(char *fn) {
 	FILE *fi = fopen(fn, "r");
-	return (fi != 0);
+	return ((fi != 0) && !fclose(fi));
+}
+
+void send400(int s) {
+	warn("sending 400 Bad Request");
+
+	char text400[] = "HTTP/1.1 400 Bad Request\r\n"
+					 "Connection: close\r\n"
+					 "Content-Type: text/plain\r\n"
+					 "Server: Dissemina/0.0.0\r\n"
+					 "\r\n"
+					 "Bad Request\n";
+	int len = strlen(text400);
+	trySendall(s, text400, len);
 }
 
 void send404(int s) {
@@ -127,7 +171,7 @@ void send404(int s) {
 					 "Content-Type: text/plain\r\n"
 					 "Server: Dissemina/0.0.0\r\n"
 					 "\r\n"
-					 "No\n";
+					 "Not Found\n";
 	int len = strlen(text404);
 	trySendall(s, text404, len);
 }
@@ -202,24 +246,20 @@ int main(int argc, char *argv[]) {
 						FD_CLR(i, &master);
 					} else {
 						//cerr << "dissemina: data from " << i << ": ``" << buf << "''" << endl;
-						if ((buf[0] == 'G') && (buf[1] == 'E') && (buf[2] == 'T')) { // HTTP GET
-							char filename[1024];
-							filename[0] = '.';
-							int j;
-							for (j = 0; buf[4 + j] && (buf[4 + j] != ' ') && (j < 1022); ++j)
-								filename[j + 1] = buf[4 + j];
-							filename[j + 1] = 0;
-
-							if ((j == 1) && (filename[1] == '/'))
-								strcpy(filename, "./index.xml");
-
-							if (!canOpen(filename)) {
-								warn3("can't find ``", filename, "''");
+						if (startsWith(buf, "GET")) { // HTTP GET
+							char uri[MAXURISIZE];
+							if (getRequestUri(uri, buf + 3) == -1) {
+								warn("malformed request");
+								send400(i);
+								close(i);
+								FD_CLR(i, &master);
+							} else if (!canOpen(uri)) {
+								warn3("can't find ``", uri, "''");
 								send404(i);
 								close(i);
 								FD_CLR(i, &master);
 							} else {
-								sendPage(i, filename);
+								sendPage(i, uri);
 								close(i);
 								FD_CLR(i, &master);
 							}
