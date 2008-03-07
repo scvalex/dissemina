@@ -4,19 +4,20 @@
  * listens for GET requests on port 6462 and carries them out
  */
 
-#define DEBUG 1
+#define DEBUG 0
 const int MAXURISIZE = 1024;
 
 using namespace std;
 
-#include <iostream>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <cctype>
 #include <cstring>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -34,9 +35,19 @@ char* getCurrentTime() {
 	return tmp;
 }
 
-#define warn(a) if (DEBUG) cerr << "dissemina: " << getCurrentTime() << " - " << a << endl
-#define warn3(a, b, c) if (DEBUG) cerr << "dissemina: " << getCurrentTime() << " - " << a << b << c << endl
-#define warn4(a, b, c, d) if (DEBUG) cerr << "dissemina: " << getCurrentTime() << " - " << a << b << c << d << endl
+const char* tostr(const char *s) {
+	return s;
+}
+
+char* tostr(int n) {
+	static char buf[16];
+	sprintf(buf, "%d", n);
+	return buf;
+}
+
+#define warn(a) if (DEBUG) fprintf(stderr,"dissemina: %s - %s\n", getCurrentTime(), a)
+#define warn3(a, b, c) if (DEBUG) fprintf(stderr, "dissemina: %s - %s%s%s\n", getCurrentTime(), tostr(a), tostr(b), tostr(c))
+#define warn4(a, b, c, d) if (DEBUG) fprintf(stderr, "dissemina: %s - %s%s%s%s\n", getCurrentTime(), tostr(a), tostr(b), tostr(c), tostr(d))
 
 int sendall(int s, const char *buf, int &len) {
 	int total(0),
@@ -145,8 +156,8 @@ void sendPage(int s, const char *fn) {
 }
 
 bool canOpen(char *fn) {
-	FILE *fi = fopen(fn, "r");
-	return ((fi != 0) && !fclose(fi));
+	static struct stat s;
+	return ((stat(fn, &s) == 0) && (S_ISREG(s.st_mode)));
 }
 
 void send400(int s) {
@@ -254,7 +265,7 @@ int main(int argc, char *argv[]) {
 								close(i);
 								FD_CLR(i, &master);
 							} else if (!canOpen(uri)) {
-								warn3("can't find ``", uri, "''");
+								warn3(" can't find ``", uri, "''");
 								send404(i);
 								close(i);
 								FD_CLR(i, &master);
