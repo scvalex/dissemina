@@ -4,7 +4,7 @@
  * listens for GET requests on port 6462 and carries them out
  */
 
-#define DEBUG 0
+#define DEBUG 1
 const int MAXURISIZE = 1024;
 
 using namespace std;
@@ -155,9 +155,15 @@ void sendPage(int s, const char *fn) {
 	}
 }
 
-bool canOpen(char *fn) {
+int canOpen(const char *fn) {
 	static struct stat s;
-	return ((stat(fn, &s) == 0) && (S_ISREG(s.st_mode)));
+	if ((stat(fn, &s) != 0) || !S_ISREG(s.st_mode))
+		return 0;
+	
+	if (strstr(fn, ".."))
+		return 0;
+
+	return 1;
 }
 
 void send400(int s) {
@@ -265,7 +271,7 @@ int main(int argc, char *argv[]) {
 								close(i);
 								FD_CLR(i, &master);
 							} else if (!canOpen(uri)) {
-								warn3(" can't find ``", uri, "''");
+								warn3("can't find ``", uri, "''");
 								send404(i);
 								close(i);
 								FD_CLR(i, &master);

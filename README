@@ -23,8 +23,9 @@ Feature plan for 0.1:
   * serve static files from the current directory with minimmum hustle [done]
   * guess filetype and fill in the Content-Type header correctly [partial]
   * handle thousands of requests per second well [no]
-  * runs on Linux [done]
-  * runs on Windows [no]
+  * run on Linux [done]
+  * run on Windows [no]
+
 
 License
 =======
