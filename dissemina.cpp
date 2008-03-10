@@ -4,8 +4,9 @@
  * listens for GET requests on port 6462 and carries them out
  */
 
-#define DEBUG 1
+#define DEBUG 0
 const int MAXURISIZE = 1024;
+const int NUM_FDS = 1024;
 
 using namespace std;
 
@@ -15,6 +16,7 @@ using namespace std;
 #include <ctime>
 #include <cctype>
 #include <cstring>
+#include <poll.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -26,6 +28,11 @@ const short LocalPort = 6462;
 
 char buf[1024];
 int listener;
+
+void quit_err(const char *s) {
+	perror(s);
+	exit(1);
+}
 
 char* getCurrentTime() {
 	time_t t = time(0);
@@ -153,6 +160,8 @@ void sendPage(int s, const char *fn) {
 		len = fread(buf, 1, 1024, fi);
 		trySendall(s, buf, len);
 	}
+
+	fclose(fi);
 }
 
 int canOpen(const char *fn) {
@@ -194,95 +203,95 @@ void send404(int s) {
 }
 
 void setuplistener() {
-	if ((listener = socket(PF_INET, SOCK_STREAM, 0)) == -1) {
-		perror("socket");
-		exit(1);
-	}
+	if ((listener = socket(PF_INET, SOCK_STREAM, 0)) == -1)
+		quit_err("socket");
 
 	int yes(1);
-	if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (char*)&yes, sizeof(yes)) < 0) {
-		perror("setsockopt");
-		exit(1);
-	}
+	if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (char*)&yes, sizeof(yes)) < 0)
+		quit_err("setsockopt");
 
 	sockaddr_in myaddr;
 	memset(&myaddr, 0, sizeof(myaddr));
 	myaddr.sin_family = AF_INET;
 	myaddr.sin_port = htons(LocalPort);
 	myaddr.sin_addr.s_addr = INADDR_ANY;
-	if (bind(listener, (sockaddr*)&myaddr, sizeof(myaddr)) == -1) {
-		perror("bind");
-		exit(1);
-	}
+	if (bind(listener, (sockaddr*)&myaddr, sizeof(myaddr)) == -1)
+		quit_err("bind");
 
-	if (listen(listener, 10) == -1) {
-		perror("listen");
-		exit(1);
-	}
+	if (listen(listener, 10) == -1)
+		quit_err("listen");
 	warn3("*** listening on port ", LocalPort, " ***");
 }
+
+#define close_and_unset_fd(i)\
+	{\
+		close(fds[i].fd);\
+		fds[i].fd = -1;\
+	}
 
 int main(int argc, char *argv[]) {
 	setuplistener();
 
-	fd_set master,
-		   rfds;
+	struct pollfd fds[NUM_FDS];
+	for (int i(0); i < NUM_FDS; ++i)
+		fds[i].fd = -1;
 
-	FD_ZERO(&master);
-	FD_SET(listener, &master);
-	int maxfd = listener;
-	while (1) {
-		rfds = master;
-		if (select(maxfd + 1, &rfds, NULL, NULL, NULL) == -1) {
-			perror("select");
-			exit(1);
+	fds[0].fd = listener;
+	fds[0].events = POLLRDNORM;
+	for (;;) {
+		if (poll(fds, NUM_FDS, -1) == -1)
+			quit_err("poll");
+
+		if (fds[0].revents & POLLRDNORM) {
+			sockaddr_in remoteaddr;
+			socklen_t addrlen = sizeof(remoteaddr);
+			int newfd;
+			if ((newfd = accept(listener, (sockaddr*)&remoteaddr, &addrlen)) == -1) {
+				perror("accept");
+				continue;
+			}
+
+			int i;
+			for (i = 1; i < NUM_FDS; ++i)
+				if (fds[i].fd == -1)
+					break;
+			if (i == NUM_FDS) {
+				warn("too many open connections; dropping a new one");
+				continue;
+			}
+
+			fds[i].fd = newfd;
+			fds[i].events = POLLRDNORM;
+			warn4("connection from ", inet_ntoa(remoteaddr.sin_addr), " on socket ", newfd);
 		}
 
-		for (int i(0); i <= maxfd; ++i)
-			if (FD_ISSET(i, &rfds)) {
-				if (i == listener) {
-					sockaddr_in remoteaddr;
-					socklen_t addrlen = sizeof(remoteaddr);
-					int newfd;
-					if ((newfd = accept(listener, (sockaddr*)&remoteaddr, &addrlen)) == -1)
-						perror("accept");
-					else {
-						FD_SET(newfd, &master);
-						if (newfd > maxfd)
-							maxfd = newfd;
-						warn4("connection from ", inet_ntoa(remoteaddr.sin_addr), " on socket ", newfd);
-					}
+		for (int i(1); i < NUM_FDS; ++i)
+			if (fds[i].revents & POLLRDNORM) {
+				int nbytes;
+				if ((nbytes = recv(fds[i].fd, buf, sizeof(buf), 0)) <= 0) {
+					if (nbytes == 0)
+						warn3("listen: socket ", fds[i].fd, " closed");
+					else
+						perror("recv");
+					close_and_unset_fd(i);
 				} else {
-					int nbytes;
-					if ((nbytes = recv(i, buf, sizeof(buf), 0)) <= 0) {
-						if (nbytes == 0)
-							warn3("listen: socket ", i, " closed");
-						else
-							perror("recv");
-						close(i);
-						FD_CLR(i, &master);
-					} else {
-						//cerr << "dissemina: data from " << i << ": ``" << buf << "''" << endl;
-						if (startsWith(buf, "GET")) { // HTTP GET
-							char uri[MAXURISIZE];
-							if (getRequestUri(uri, buf + 3) == -1) {
-								warn("malformed request");
-								send400(i);
-								close(i);
-								FD_CLR(i, &master);
-							} else if (!canOpen(uri)) {
-								warn3("can't find ``", uri, "''");
-								send404(i);
-								close(i);
-								FD_CLR(i, &master);
-							} else {
-								sendPage(i, uri);
-								close(i);
-								FD_CLR(i, &master);
-							}
+					//cerr << "dissemina: data from " << fds[i].fd << ": ``" << buf << "''" << endl;
+					if (startsWith(buf, "GET")) { // HTTP GET
+						char uri[MAXURISIZE];
+						if (getRequestUri(uri, buf + 3) == -1) {
+							warn("malformed request");
+							send400(fds[i].fd);
+							close_and_unset_fd(i);
+						} else if (!canOpen(uri)) {
+							warn3("can't find ``", uri, "''");
+							send404(fds[i].fd);
+							close_and_unset_fd(i);
+						} else {
+							sendPage(fds[i].fd, uri);
+							close_and_unset_fd(i);
 						}
-						memset(buf, 0, sizeof(buf));
 					}
+					memset(buf, 0, sizeof(buf));
 				}
 			}
 	}
