@@ -1,21 +1,17 @@
 /*
- * dissemina.cpp -- very simple HTTP server
+ * dissemina.c -- very fast HTTP server
  *
  * listens for GET requests on port 6462 and carries them out
  */
 
 #define DEBUG 0
-const int MAXURISIZE = 1024;
-const int NUM_FDS = 1024;
+#define _XOPEN_SOURCE 1
 
-using namespace std;
-
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <ctime>
-#include <cctype>
-#include <cstring>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <ctype.h>
 #include <poll.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -23,6 +19,9 @@ using namespace std;
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
+const int MAXURISIZE = 1024;
+const int NUM_FDS = 1024;
 
 const short LocalPort = 6462;
 
@@ -42,7 +41,7 @@ char* getCurrentTime() {
 	return tmp;
 }
 
-const char* tostr(const char *s) {
+/*const char* tostr(const char *s) {
 	return s;
 }
 
@@ -50,15 +49,18 @@ char* tostr(int n) {
 	static char buf[16];
 	sprintf(buf, "%d", n);
 	return buf;
-}
+}*/
 
-#define warn(a) if (DEBUG) fprintf(stderr,"dissemina: %s - %s\n", getCurrentTime(), a)
+/*#define warn(a) if (DEBUG) fprintf(stderr,"dissemina: %s - %s\n", getCurrentTime(), a)
 #define warn3(a, b, c) if (DEBUG) fprintf(stderr, "dissemina: %s - %s%s%s\n", getCurrentTime(), tostr(a), tostr(b), tostr(c))
-#define warn4(a, b, c, d) if (DEBUG) fprintf(stderr, "dissemina: %s - %s%s%s%s\n", getCurrentTime(), tostr(a), tostr(b), tostr(c), tostr(d))
+#define warn4(a, b, c, d) if (DEBUG) fprintf(stderr, "dissemina: %s - %s%s%s%s\n", getCurrentTime(), tostr(a), tostr(b), tostr(c), tostr(d))*/
+#define warn(a)
+#define warn3(a, b, c)
+#define warn4(a, b, c, d)
 
-int sendall(int s, const char *buf, int &len) {
-	int total(0),
-		bytesleft = len,
+int sendall(int s, const char *buf, int *len) {
+	int total = 0,
+		bytesleft = *len,
 		n;
 
 	while (bytesleft > 0) {
@@ -68,12 +70,12 @@ int sendall(int s, const char *buf, int &len) {
 		total += n;
 		bytesleft -= n;
 	}
-	len = total;
+	*len = total;
 
 	return ((n == -1) ? (-1) : (0));
 }
 
-void trySendall(int s, const char *buf, int &len) {
+void trySendall(int s, const char *buf, int *len) {
 	if (sendall(s, buf, len) == -1) {
 		char aux[256];
 		sprintf(aux, "sendall (%d)", s);
@@ -82,9 +84,9 @@ void trySendall(int s, const char *buf, int &len) {
 	}
 }
 
-bool endsWith(const char *s, const char *w) {
-	int i = strlen(s) - 1;
-	int j = strlen(w) - 1;
+int endsWith(const char *s, const char *w) {
+	int i = strlen(s) - 1,
+		j = strlen(w) - 1;
 
 	while ((i >= 0) && (j >= 0) && (s[i] == w[j]))
 		--i,
@@ -93,7 +95,7 @@ bool endsWith(const char *s, const char *w) {
 	return (j < 0);
 }
 
-bool startsWith(const char *s, const char *w) {
+int startsWith(const char *s, const char *w) {
 	char *a = (char*)s,
 		 *b = (char*)w;
 
@@ -123,7 +125,7 @@ int getRequestUri(char *uri, char *buf) {
 	return 0;
 }
 
-const int FileHandleNum = 5;
+#define FileHandleNum 5
 const char *FileHandle[FileHandleNum][4] = {
 	{"", "rb", "sending binary file", "application/octet-stream"},
 	{".txt", "r", "sending text file", "text/plain"},
@@ -135,8 +137,9 @@ const char *FileHandle[FileHandleNum][4] = {
 void sendPage(int s, const char *fn) {
 	FILE *fi;
 	char conttype[32];
-	int fh(0);
-	for (int i(1); i < FileHandleNum; ++i)
+	int fh = 0;
+	int i;
+	for (i = 1; i < FileHandleNum; ++i)
 		if (endsWith(fn, FileHandle[i][0])) {
 			fh = i;
 			break;
@@ -153,12 +156,12 @@ void sendPage(int s, const char *fn) {
 					 "Server: Dissemina/0.0.0\r\n"
 					 "\r\n", conttype);
 	int len = strlen(header);
-	trySendall(s, header, len);
+	trySendall(s, header, &len);
 
 	char buf[1025];
 	while (!feof(fi) && !ferror(fi)) {
 		len = fread(buf, 1, 1024, fi);
-		trySendall(s, buf, len);
+		trySendall(s, buf, &len);
 	}
 
 	fclose(fi);
@@ -185,7 +188,7 @@ void send400(int s) {
 					 "\r\n"
 					 "Bad Request\n";
 	int len = strlen(text400);
-	trySendall(s, text400, len);
+	trySendall(s, text400, &len);
 }
 
 void send404(int s) {
@@ -199,23 +202,23 @@ void send404(int s) {
 					 "\r\n"
 					 "Not Found\n";
 	int len = strlen(text404);
-	trySendall(s, text404, len);
+	trySendall(s, text404, &len);
 }
 
 void setuplistener() {
 	if ((listener = socket(PF_INET, SOCK_STREAM, 0)) == -1)
 		quit_err("socket");
 
-	int yes(1);
+	int yes = 1;
 	if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (char*)&yes, sizeof(yes)) < 0)
 		quit_err("setsockopt");
 
-	sockaddr_in myaddr;
+	struct sockaddr_in myaddr;
 	memset(&myaddr, 0, sizeof(myaddr));
 	myaddr.sin_family = AF_INET;
 	myaddr.sin_port = htons(LocalPort);
 	myaddr.sin_addr.s_addr = INADDR_ANY;
-	if (bind(listener, (sockaddr*)&myaddr, sizeof(myaddr)) == -1)
+	if (bind(listener, (struct sockaddr*)&myaddr, sizeof(myaddr)) == -1)
 		quit_err("bind");
 
 	if (listen(listener, 10) == -1)
@@ -233,7 +236,8 @@ int main(int argc, char *argv[]) {
 	setuplistener();
 
 	struct pollfd fds[NUM_FDS];
-	for (int i(0); i < NUM_FDS; ++i)
+	int i;
+	for (i = 0; i < NUM_FDS; ++i)
 		fds[i].fd = -1;
 
 	fds[0].fd = listener;
@@ -243,10 +247,10 @@ int main(int argc, char *argv[]) {
 			quit_err("poll");
 
 		if (fds[0].revents & POLLRDNORM) {
-			sockaddr_in remoteaddr;
+			struct sockaddr_in remoteaddr;
 			socklen_t addrlen = sizeof(remoteaddr);
 			int newfd;
-			if ((newfd = accept(listener, (sockaddr*)&remoteaddr, &addrlen)) == -1) {
+			if ((newfd = accept(listener, (struct sockaddr*)&remoteaddr, &addrlen)) == -1) {
 				perror("accept");
 				continue;
 			}
@@ -265,7 +269,7 @@ int main(int argc, char *argv[]) {
 			warn4("connection from ", inet_ntoa(remoteaddr.sin_addr), " on socket ", newfd);
 		}
 
-		for (int i(1); i < NUM_FDS; ++i)
+		for (i = 1; i < NUM_FDS; ++i)
 			if (fds[i].revents & POLLRDNORM) {
 				int nbytes;
 				if ((nbytes = recv(fds[i].fd, buf, sizeof(buf), 0)) <= 0) {

@@ -1,3 +1,3 @@
-dissemina: dissemina.cpp
-	g++ -Wall dissemina.cpp -o dissemina
+dissemina: dissemina.c
+	gcc -Wall dissemina.c -o dissemina
 
