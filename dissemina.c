@@ -14,6 +14,7 @@
 #include <ctype.h>
 #include <poll.h>
 #include <unistd.h>
+#include <stdarg.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -41,22 +42,15 @@ char* getCurrentTime() {
 	return tmp;
 }
 
-/*const char* tostr(const char *s) {
-	return s;
+void logprintf(const char *fmt, ...) {
+	if (!DEBUG)
+		return;
+	va_list ap;
+	va_start(ap, fmt);
+	fprintf(stderr, "dissemina: %s: ", getCurrentTime());
+	vfprintf(stderr, fmt, ap);
+	fprintf(stderr, "\n");
 }
-
-char* tostr(int n) {
-	static char buf[16];
-	sprintf(buf, "%d", n);
-	return buf;
-}*/
-
-/*#define warn(a) if (DEBUG) fprintf(stderr,"dissemina: %s - %s\n", getCurrentTime(), a)
-#define warn3(a, b, c) if (DEBUG) fprintf(stderr, "dissemina: %s - %s%s%s\n", getCurrentTime(), tostr(a), tostr(b), tostr(c))
-#define warn4(a, b, c, d) if (DEBUG) fprintf(stderr, "dissemina: %s - %s%s%s%s\n", getCurrentTime(), tostr(a), tostr(b), tostr(c), tostr(d))*/
-#define warn(a)
-#define warn3(a, b, c)
-#define warn4(a, b, c, d)
 
 int sendall(int s, const char *buf, int *len) {
 	int total = 0,
@@ -146,7 +140,7 @@ void sendPage(int s, const char *fn) {
 		}
 	
 	fi = fopen(fn, FileHandle[fh][1]);
-	warn(FileHandle[fh][2]);
+	logprintf("%s", FileHandle[fh][2]);
 	strcpy(conttype, FileHandle[fh][3]);
 
 	char header[256];
@@ -179,7 +173,7 @@ int canOpen(const char *fn) {
 }
 
 void send400(int s) {
-	warn("sending 400 Bad Request");
+	logprintf("sending 400 Bad Request");
 
 	char text400[] = "HTTP/1.1 400 Bad Request\r\n"
 					 "Connection: close\r\n"
@@ -192,8 +186,8 @@ void send400(int s) {
 }
 
 void send404(int s) {
-	warn("problem reading requested file");
-	warn("sending 404 Not Found");
+	logprintf("problem reading requested file");
+	logprintf("sending 404 Not Found");
 
 	char text404[] = "HTTP/1.1 404 Not Found\r\n"
 					 "Connection: close\r\n"
@@ -223,7 +217,7 @@ void setuplistener() {
 
 	if (listen(listener, 10) == -1)
 		quit_err("listen");
-	warn3("*** listening on port ", LocalPort, " ***");
+	logprintf("*** listening on port %d ***", LocalPort);
 }
 
 #define close_and_unset_fd(i)\
@@ -260,13 +254,13 @@ int main(int argc, char *argv[]) {
 				if (fds[i].fd == -1)
 					break;
 			if (i == NUM_FDS) {
-				warn("too many open connections; dropping a new one");
+				logprintf("too many open connections; dropping a new one");
 				continue;
 			}
 
 			fds[i].fd = newfd;
 			fds[i].events = POLLRDNORM;
-			warn4("connection from ", inet_ntoa(remoteaddr.sin_addr), " on socket ", newfd);
+			logprintf("connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
 		}
 
 		for (i = 1; i < NUM_FDS; ++i)
@@ -274,7 +268,7 @@ int main(int argc, char *argv[]) {
 				int nbytes;
 				if ((nbytes = recv(fds[i].fd, buf, sizeof(buf), 0)) <= 0) {
 					if (nbytes == 0)
-						warn3("listen: socket ", fds[i].fd, " closed");
+						logprintf("listen: socket %d closed", fds[i].fd);
 					else
 						perror("recv");
 					close_and_unset_fd(i);
@@ -283,11 +277,11 @@ int main(int argc, char *argv[]) {
 					if (startsWith(buf, "GET")) { // HTTP GET
 						char uri[MAXURISIZE];
 						if (getRequestUri(uri, buf + 3) == -1) {
-							warn("malformed request");
+							logprintf("malformed request");
 							send400(fds[i].fd);
 							close_and_unset_fd(i);
 						} else if (!canOpen(uri)) {
-							warn3("can't find ``", uri, "''");
+							logprintf("can't find ``%s''", uri);
 							send404(fds[i].fd);
 							close_and_unset_fd(i);
 						} else {
