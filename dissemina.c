@@ -4,8 +4,9 @@
  * listens for GET requests on port 6462 and carries them out
  */
 
+/* Set DEBUG to 1 to kill all output */
 #define DEBUG 0
-#define _XOPEN_SOURCE 1
+#define _XOPEN_SOURCE 1 /* Needed for POLLRDNORM... */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,18 +23,20 @@
 #include <arpa/inet.h>
 
 const int MAXURISIZE = 1024;
+
+/* Maximum number of open network connections */
 const int NUM_FDS = 1024;
 
+/* On which port shall I listen? */
 const short LocalPort = 6462;
 
-char buf[1024];
-int listener;
-
+/* Display an error and quit */
 void quit_err(const char *s) {
 	perror(s);
 	exit(1);
 }
 
+/* Return the current ctime as a string */
 char* getCurrentTime() {
 	time_t t = time(0);
 	static char tmp[26];
@@ -42,6 +45,7 @@ char* getCurrentTime() {
 	return tmp;
 }
 
+/* Output a warning */
 void logprintf(const char *fmt, ...) {
 	if (!DEBUG)
 		return;
@@ -52,32 +56,25 @@ void logprintf(const char *fmt, ...) {
 	fprintf(stderr, "\n");
 }
 
-int sendall(int s, const char *buf, int *len) {
+/* Send all data in buf to s */
+void sendall(int s, const char *buf, int *len) {
 	int total = 0,
 		bytesleft = *len,
 		n;
 
 	while (bytesleft > 0) {
 		n = send(s, buf + total, bytesleft, 0);
-		if (n < 0)
-			break;
+		if (n < 0) {
+			logprintf("trouble sending data to %d", s);
+			return;
+		}
 		total += n;
 		bytesleft -= n;
 	}
 	*len = total;
-
-	return ((n == -1) ? (-1) : (0));
 }
 
-void trySendall(int s, const char *buf, int *len) {
-	if (sendall(s, buf, len) == -1) {
-		char aux[256];
-		sprintf(aux, "sendall (%d)", s);
-		perror(aux);
-		exit(1);
-	}
-}
-
+/* Returns true if s ends with w */
 int endsWith(const char *s, const char *w) {
 	int i = strlen(s) - 1,
 		j = strlen(w) - 1;
@@ -89,6 +86,8 @@ int endsWith(const char *s, const char *w) {
 	return (j < 0);
 }
 
+/* Returns true if s starts with w
+ * NOTE: returns false if s == w */
 int startsWith(const char *s, const char *w) {
 	char *a = (char*)s,
 		 *b = (char*)w;
@@ -100,6 +99,7 @@ int startsWith(const char *s, const char *w) {
 	return (!*a || !*b);
 }
 
+/* Returns the URI as a string */
 int getRequestUri(char *uri, char *buf) {
 	char *a = buf;
 	for (; *a == ' '; ++a);
@@ -128,6 +128,7 @@ const char *FileHandle[FileHandleNum][4] = {
 	{".xml", "r", "sending xml document", "application/xml"}
 };
 
+/* Send file fn to s */
 void sendPage(int s, const char *fn) {
 	FILE *fi;
 	char conttype[32];
@@ -150,17 +151,18 @@ void sendPage(int s, const char *fn) {
 					 "Server: Dissemina/0.0.0\r\n"
 					 "\r\n", conttype);
 	int len = strlen(header);
-	trySendall(s, header, &len);
+	sendall(s, header, &len);
 
 	char buf[1025];
 	while (!feof(fi) && !ferror(fi)) {
 		len = fread(buf, 1, 1024, fi);
-		trySendall(s, buf, &len);
+		sendall(s, buf, &len);
 	}
 
 	fclose(fi);
 }
 
+/* Returns true if file should be openable */
 int canOpen(const char *fn) {
 	static struct stat s;
 	if ((stat(fn, &s) != 0) || !S_ISREG(s.st_mode))
@@ -172,6 +174,7 @@ int canOpen(const char *fn) {
 	return 1;
 }
 
+/* Send 400 Bad Request to s */
 void send400(int s) {
 	logprintf("sending 400 Bad Request");
 
@@ -182,9 +185,10 @@ void send400(int s) {
 					 "\r\n"
 					 "Bad Request\n";
 	int len = strlen(text400);
-	trySendall(s, text400, &len);
+	sendall(s, text400, &len);
 }
 
+/* Send 404 Not Found to s */
 void send404(int s) {
 	logprintf("problem reading requested file");
 	logprintf("sending 404 Not Found");
@@ -196,10 +200,13 @@ void send404(int s) {
 					 "\r\n"
 					 "Not Found\n";
 	int len = strlen(text404);
-	trySendall(s, text404, &len);
+	sendall(s, text404, &len);
 }
 
-void setuplistener() {
+/* Create the listener and return it */
+int setuplistener() {
+	int listener;
+
 	if ((listener = socket(PF_INET, SOCK_STREAM, 0)) == -1)
 		quit_err("socket");
 
@@ -218,6 +225,8 @@ void setuplistener() {
 	if (listen(listener, 10) == -1)
 		quit_err("listen");
 	logprintf("*** listening on port %d ***", LocalPort);
+
+	return listener;
 }
 
 #define close_and_unset_fd(i)\
@@ -227,7 +236,7 @@ void setuplistener() {
 	}
 
 int main(int argc, char *argv[]) {
-	setuplistener();
+	int listener = setuplistener();
 
 	struct pollfd fds[NUM_FDS];
 	int i;
@@ -236,6 +245,7 @@ int main(int argc, char *argv[]) {
 
 	fds[0].fd = listener;
 	fds[0].events = POLLRDNORM;
+	char buf[1024];
 	for (;;) {
 		if (poll(fds, NUM_FDS, -1) == -1)
 			quit_err("poll");
