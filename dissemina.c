@@ -22,13 +22,23 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-const int MAXURISIZE = 1024;
+#define MAXURISIZE 1024
+#define MAXREQSIZE 4096
 
 /* Maximum number of open network connections */
-const int NUM_FDS = 1024;
+#define NUM_FDS 16
 
 /* On which port shall I listen? */
-const short LocalPort = 6462;
+#define LOCAL_PORT 6462
+
+struct Request {
+	char text[MAXREQSIZE];
+	int len;
+};
+
+int listener;
+struct pollfd fds[NUM_FDS];
+struct Request reqs[NUM_FDS];
 
 /* Display an error and quit */
 void quit_err(const char *s) {
@@ -46,12 +56,12 @@ char* getCurrentTime() {
 }
 
 /* Output a warning */
-void logprintf(const char *fmt, ...) {
+void logprintf(char *fn, char *fmt, ...) {
 	if (!DEBUG)
 		return;
 	va_list ap;
 	va_start(ap, fmt);
-	fprintf(stderr, "dissemina: %s: ", getCurrentTime());
+	fprintf(stderr, "%16s: %s: ", fn, getCurrentTime());
 	vfprintf(stderr, fmt, ap);
 	fprintf(stderr, "\n");
 }
@@ -65,7 +75,7 @@ void sendall(int s, const char *buf, int *len) {
 	while (bytesleft > 0) {
 		n = send(s, buf + total, bytesleft, 0);
 		if (n < 0) {
-			logprintf("trouble sending data to %d", s);
+			logprintf("sendall", "trouble sending data to %d", s);
 			return;
 		}
 		total += n;
@@ -123,7 +133,7 @@ int getRequestUri(char *uri, char *buf) {
 const char *FileHandle[FileHandleNum][4] = {
 	{"", "rb", "sending binary file", "application/octet-stream"},
 	{".txt", "r", "sending text file", "text/plain"},
-	{".cpp", "r", "sending text file", "text/plain"}, // should be text/x-c++src but FF refuses to open them
+	{".c", "r", "sending text file", "text/plain"}, // should be text/x-c++src but FF refuses to open them
 	{".html", "r", "sending html page", "text/html"},
 	{".xml", "r", "sending xml document", "application/xml"}
 };
@@ -141,7 +151,7 @@ void sendPage(int s, const char *fn) {
 		}
 	
 	fi = fopen(fn, FileHandle[fh][1]);
-	logprintf("%s", FileHandle[fh][2]);
+	logprintf("sendPage", "%s", FileHandle[fh][2]);
 	strcpy(conttype, FileHandle[fh][3]);
 
 	char header[256];
@@ -176,7 +186,7 @@ int canOpen(const char *fn) {
 
 /* Send 400 Bad Request to s */
 void send400(int s) {
-	logprintf("sending 400 Bad Request");
+	logprintf("send400", "sending 400 Bad Request");
 
 	char text400[] = "HTTP/1.1 400 Bad Request\r\n"
 					 "Connection: close\r\n"
@@ -190,8 +200,8 @@ void send400(int s) {
 
 /* Send 404 Not Found to s */
 void send404(int s) {
-	logprintf("problem reading requested file");
-	logprintf("sending 404 Not Found");
+	logprintf("send404", "problem reading requested file");
+	logprintf("send404", "sending 404 Not Found");
 
 	char text404[] = "HTTP/1.1 404 Not Found\r\n"
 					 "Connection: close\r\n"
@@ -204,9 +214,7 @@ void send404(int s) {
 }
 
 /* Create the listener and return it */
-int setuplistener() {
-	int listener;
-
+void setupListener() {
 	if ((listener = socket(PF_INET, SOCK_STREAM, 0)) == -1)
 		quit_err("socket");
 
@@ -217,35 +225,30 @@ int setuplistener() {
 	struct sockaddr_in myaddr;
 	memset(&myaddr, 0, sizeof(myaddr));
 	myaddr.sin_family = AF_INET;
-	myaddr.sin_port = htons(LocalPort);
+	myaddr.sin_port = htons(LOCAL_PORT);
 	myaddr.sin_addr.s_addr = INADDR_ANY;
 	if (bind(listener, (struct sockaddr*)&myaddr, sizeof(myaddr)) == -1)
 		quit_err("bind");
 
 	if (listen(listener, 10) == -1)
 		quit_err("listen");
-	logprintf("*** listening on port %d ***", LocalPort);
-
-	return listener;
+	logprintf("setupListener", "*** listening on port %d ***", LOCAL_PORT);
 }
 
 #define close_and_unset_fd(i)\
-	{\
 		close(fds[i].fd);\
-		fds[i].fd = -1;\
-	}
+		logprintf("listen", "socket %d closed", fds[i].fd);\
+		fds[i].fd = -1;
 
 int main(int argc, char *argv[]) {
-	int listener = setuplistener();
+	setupListener();
 
-	struct pollfd fds[NUM_FDS];
 	int i;
 	for (i = 0; i < NUM_FDS; ++i)
 		fds[i].fd = -1;
 
 	fds[0].fd = listener;
 	fds[0].events = POLLRDNORM;
-	char buf[1024];
 	for (;;) {
 		if (poll(fds, NUM_FDS, -1) == -1)
 			quit_err("poll");
@@ -264,34 +267,38 @@ int main(int argc, char *argv[]) {
 				if (fds[i].fd == -1)
 					break;
 			if (i == NUM_FDS) {
-				logprintf("too many open connections; dropping a new one");
+				logprintf("dissemina", "too many open connections; dropping a new one");
 				continue;
 			}
 
 			fds[i].fd = newfd;
 			fds[i].events = POLLRDNORM;
-			logprintf("connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
+			memset(&reqs[i], 0, sizeof(reqs[0]));
+			logprintf("dissemina", "connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
 		}
 
 		for (i = 1; i < NUM_FDS; ++i)
 			if (fds[i].revents & POLLRDNORM) {
 				int nbytes;
-				if ((nbytes = recv(fds[i].fd, buf, sizeof(buf), 0)) <= 0) {
+				if ((nbytes = recv(fds[i].fd, reqs[i].text + reqs[i].len, sizeof(reqs[0].text) - reqs[i].len, 0)) <= 0) {
 					if (nbytes == 0)
-						logprintf("listen: socket %d closed", fds[i].fd);
+						logprintf("dissemina", "listen: socket %d closed", fds[i].fd);
 					else
 						perror("recv");
 					close_and_unset_fd(i);
 				} else {
-					//cerr << "dissemina: data from " << fds[i].fd << ": ``" << buf << "''" << endl;
-					if (startsWith(buf, "GET")) { // HTTP GET
+					reqs[i].len += nbytes;
+					//logprintf("dissemina", "data from %d: ``%s''", fds[i].fd, reqs[i].text);
+					if (!endsWith(reqs[i].text, "\r\n\r\n"))
+						continue;
+					if (startsWith(reqs[i].text, "GET")) { // HTTP GET
 						char uri[MAXURISIZE];
-						if (getRequestUri(uri, buf + 3) == -1) {
-							logprintf("malformed request");
+						if (getRequestUri(uri, reqs[i].text + 3) == -1) {
+							logprintf("dissemina", "malformed request");
 							send400(fds[i].fd);
 							close_and_unset_fd(i);
 						} else if (!canOpen(uri)) {
-							logprintf("can't find ``%s''", uri);
+							logprintf("dissemina", "can't find ``%s''", uri);
 							send404(fds[i].fd);
 							close_and_unset_fd(i);
 						} else {
@@ -299,7 +306,6 @@ int main(int argc, char *argv[]) {
 							close_and_unset_fd(i);
 						}
 					}
-					memset(buf, 0, sizeof(buf));
 				}
 			}
 	}
