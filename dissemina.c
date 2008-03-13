@@ -240,6 +240,67 @@ void setupListener() {
 		logprintf("listen", "socket %d closed", fds[i].fd);\
 		fds[i].fd = -1;
 
+void getNewConnections() {
+	if (fds[0].revents & POLLRDNORM) {
+		struct sockaddr_in remoteaddr;
+		socklen_t addrlen = sizeof(remoteaddr);
+		int newfd;
+		if ((newfd = accept(listener, (struct sockaddr*)&remoteaddr, &addrlen)) == -1) {
+			perror("accept");
+			return;
+		}
+
+		int i;
+		for (i = 1; i < NUM_FDS; ++i)
+			if (fds[i].fd == -1)
+				break;
+		if (i == NUM_FDS) {
+			logprintf("dissemina", "too many open connections; dropping a new one");
+			return;
+		}
+
+		fds[i].fd = newfd;
+		fds[i].events = POLLRDNORM;
+		memset(&reqs[i], 0, sizeof(reqs[0]));
+		logprintf("dissemina", "connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
+	}
+}
+
+void processConnections() {
+	int i;
+	for (i = 1; i < NUM_FDS; ++i)
+		if (fds[i].revents & POLLRDNORM) {
+			int nbytes;
+			if ((nbytes = recv(fds[i].fd, reqs[i].text + reqs[i].len, sizeof(reqs[0].text) - reqs[i].len, 0)) <= 0) {
+				if (nbytes == 0)
+					logprintf("dissemina", "listen: socket %d closed", fds[i].fd);
+				else
+					perror("recv");
+				close_and_unset_fd(i);
+			} else {
+				reqs[i].len += nbytes;
+				//logprintf("dissemina", "data from %d: ``%s''", fds[i].fd, reqs[i].text);
+				if (!endsWith(reqs[i].text, "\r\n\r\n"))
+					continue;
+				if (startsWith(reqs[i].text, "GET")) { // HTTP GET
+					char uri[MAXURISIZE];
+					if (getRequestUri(uri, reqs[i].text + 3) == -1) {
+						logprintf("dissemina", "malformed request");
+						send400(fds[i].fd);
+						close_and_unset_fd(i);
+					} else if (!canOpen(uri)) {
+						logprintf("dissemina", "can't find ``%s''", uri);
+						send404(fds[i].fd);
+						close_and_unset_fd(i);
+					} else {
+						sendPage(fds[i].fd, uri);
+						close_and_unset_fd(i);
+					}
+				}
+			}
+		}
+}
+
 int main(int argc, char *argv[]) {
 	setupListener();
 
@@ -249,65 +310,15 @@ int main(int argc, char *argv[]) {
 
 	fds[0].fd = listener;
 	fds[0].events = POLLRDNORM;
+	int timeout;
 	for (;;) {
-		if (poll(fds, NUM_FDS, -1) == -1)
+		timeout = -1;
+		if (poll(fds, NUM_FDS, timeout) == -1)
 			quit_err("poll");
-
-		if (fds[0].revents & POLLRDNORM) {
-			struct sockaddr_in remoteaddr;
-			socklen_t addrlen = sizeof(remoteaddr);
-			int newfd;
-			if ((newfd = accept(listener, (struct sockaddr*)&remoteaddr, &addrlen)) == -1) {
-				perror("accept");
-				continue;
-			}
-
-			int i;
-			for (i = 1; i < NUM_FDS; ++i)
-				if (fds[i].fd == -1)
-					break;
-			if (i == NUM_FDS) {
-				logprintf("dissemina", "too many open connections; dropping a new one");
-				continue;
-			}
-
-			fds[i].fd = newfd;
-			fds[i].events = POLLRDNORM;
-			memset(&reqs[i], 0, sizeof(reqs[0]));
-			logprintf("dissemina", "connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
-		}
-
-		for (i = 1; i < NUM_FDS; ++i)
-			if (fds[i].revents & POLLRDNORM) {
-				int nbytes;
-				if ((nbytes = recv(fds[i].fd, reqs[i].text + reqs[i].len, sizeof(reqs[0].text) - reqs[i].len, 0)) <= 0) {
-					if (nbytes == 0)
-						logprintf("dissemina", "listen: socket %d closed", fds[i].fd);
-					else
-						perror("recv");
-					close_and_unset_fd(i);
-				} else {
-					reqs[i].len += nbytes;
-					//logprintf("dissemina", "data from %d: ``%s''", fds[i].fd, reqs[i].text);
-					if (!endsWith(reqs[i].text, "\r\n\r\n"))
-						continue;
-					if (startsWith(reqs[i].text, "GET")) { // HTTP GET
-						char uri[MAXURISIZE];
-						if (getRequestUri(uri, reqs[i].text + 3) == -1) {
-							logprintf("dissemina", "malformed request");
-							send400(fds[i].fd);
-							close_and_unset_fd(i);
-						} else if (!canOpen(uri)) {
-							logprintf("dissemina", "can't find ``%s''", uri);
-							send404(fds[i].fd);
-							close_and_unset_fd(i);
-						} else {
-							sendPage(fds[i].fd, uri);
-							close_and_unset_fd(i);
-						}
-					}
-				}
-			}
+		
+		getNewConnections();
+		
+		processConnections();
 	}
 
 	close(listener);
