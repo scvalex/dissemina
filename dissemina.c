@@ -140,7 +140,7 @@ void sendall(int s, const char *buf, int *len) {
 		n;
 
 	while (bytesleft > 0) {
-		n = send(s, buf + total, bytesleft, 0);
+		n = send(s, buf + total, bytesleft, MSG_NOSIGNAL);
 		if (n < 0) {
 			logprintf("sendall", "trouble sending data to %d", s);
 			return;
