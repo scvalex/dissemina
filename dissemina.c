@@ -5,7 +5,7 @@
  */
 
 /* Set DEBUG to 1 to kill all output */
-#define DEBUG 1
+#define DEBUG 0
 #define _XOPEN_SOURCE 1 /* Needed for POLLRDNORM... */
 
 #include <stdio.h>
@@ -79,6 +79,58 @@ void logprintf(char *fn, char *fmt, ...) {
 	fprintf(stderr, "%16s: %s: ", fn, getCurrentTime());
 	vfprintf(stderr, fmt, ap);
 	fprintf(stderr, "\n");
+}
+
+/* Create a new Request and return a pointer to it */
+struct Request* request_create() {
+	struct Request *r = malloc(sizeof(struct Request));
+	memset(r, 0, sizeof(struct Request));
+	return r;
+}
+
+/* Remove a request from the requests and free() it 
+ * Returns a pointer to the PREVIOUS location */
+struct Request* request_remove(struct Request *r) {
+	struct Request *p = r->prev;
+	p->next = r->next;
+	if (r->next)
+		r->next->prev = p;
+	free(r);
+	return p;
+}
+
+/* Returns true if file should be openable */
+int canOpen(const char *fn) {
+	static struct stat s;
+	if ((stat(fn, &s) != 0) || !S_ISREG(s.st_mode))
+		return 0;
+	
+	if (strstr(fn, ".."))
+		return 0;
+
+	return 1;
+}
+
+/* Create the listener and return it */
+void setupListener() {
+	if ((listener = socket(PF_INET, SOCK_STREAM, 0)) == -1)
+		quit_err("socket");
+
+	int yes = 1;
+	if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (char*)&yes, sizeof(yes)) < 0)
+		quit_err("setsockopt");
+
+	struct sockaddr_in myaddr;
+	memset(&myaddr, 0, sizeof(myaddr));
+	myaddr.sin_family = AF_INET;
+	myaddr.sin_port = htons(LOCAL_PORT);
+	myaddr.sin_addr.s_addr = INADDR_ANY;
+	if (bind(listener, (struct sockaddr*)&myaddr, sizeof(myaddr)) == -1)
+		quit_err("bind");
+
+	if (listen(listener, 10) == -1)
+		quit_err("listen");
+	logprintf("setupListener", "*** listening on port %d ***", LOCAL_PORT);
 }
 
 /* Send all data in buf to s */
@@ -166,7 +218,7 @@ int sendPage(struct Request *r) {
 	int len;
 	if (!r->fi) {
 		r->fi = fopen(r->uri, FileHandle[fh][1]);
-		logprintf("sendPage", "%s", FileHandle[fh][2]);
+		logprintf("sendPage", "%s to %d", FileHandle[fh][2], r->fd);
 
 		char header[256];
 		sprintf(header , "HTTP/1.1 200 OK\r\n"
@@ -182,8 +234,7 @@ int sendPage(struct Request *r) {
 	memset(buf, 0, sizeof(buf));
 	if (!feof(r->fi) && !ferror(r->fi)) {
 		len = fread(buf, 1, 1024, r->fi);
-		logprintf("sendPage", "sending %d bytes to %d", len, r->fd);
-		//logprintf("sendPage", "sending ``%s''", buf);
+		/* logprintf("sendPage", "sending %d bytes to %d", len, r->fd); */
 		sendall(r->fd, buf, &len);
 	}
 	
@@ -192,20 +243,7 @@ int sendPage(struct Request *r) {
 		return DONE;
 	}
 
-	logprintf("sendPage", "not done sending page");
 	return NOTDONE;
-}
-
-/* Returns true if file should be openable */
-int canOpen(const char *fn) {
-	static struct stat s;
-	if ((stat(fn, &s) != 0) || !S_ISREG(s.st_mode))
-		return 0;
-	
-	if (strstr(fn, ".."))
-		return 0;
-
-	return 1;
 }
 
 /* Send 404 Not Found to s */
@@ -223,46 +261,6 @@ int send404(struct Request *r) {
 	sendall(r->fd, text404, &len);
 
 	return DONE;
-}
-
-/* Create the listener and return it */
-void setupListener() {
-	if ((listener = socket(PF_INET, SOCK_STREAM, 0)) == -1)
-		quit_err("socket");
-
-	int yes = 1;
-	if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (char*)&yes, sizeof(yes)) < 0)
-		quit_err("setsockopt");
-
-	struct sockaddr_in myaddr;
-	memset(&myaddr, 0, sizeof(myaddr));
-	myaddr.sin_family = AF_INET;
-	myaddr.sin_port = htons(LOCAL_PORT);
-	myaddr.sin_addr.s_addr = INADDR_ANY;
-	if (bind(listener, (struct sockaddr*)&myaddr, sizeof(myaddr)) == -1)
-		quit_err("bind");
-
-	if (listen(listener, 10) == -1)
-		quit_err("listen");
-	logprintf("setupListener", "*** listening on port %d ***", LOCAL_PORT);
-}
-
-/* Create a new Request and return a pointer to it */
-struct Request* request_create() {
-	struct Request *r = malloc(sizeof(struct Request));
-	memset(r, 0, sizeof(struct Request));
-	return r;
-}
-
-/* Remove a request from the requests and free() it 
- * Returns a pointer to the PREVIOUS location */
-struct Request* request_remove(struct Request *r) {
-	struct Request *p = r->prev;
-	p->next = r->next;
-	if (r->next)
-		r->next->prev = p;
-	free(r);
-	return p;
 }
 
 /* check listener for new connections and write them into fds and reqs */
@@ -291,6 +289,8 @@ void getNewConnections() {
 		//logprintf("getNewConnections", "adding a new Request to list");
 		struct Request *nr = request_create();
 		nr->next = requests.next;
+		if (nr->next)
+			nr->next->prev = nr;
 		nr->prev = &requests;
 		nr->fd = newfd;
 		nr->state = ReadingRequest;
@@ -324,7 +324,6 @@ void checkReadingConnections() {
 					getRequestUri(cr->uri, cr->text + 3); /* Fill in the URI */
 					cr->state = ProcessingRequest; /* Mark the request for processing */
 					fds[i].fd = -1; /* The fd won't be checked for reads anymore */
-					logprintf("checkReadingConnections", "connection ready for reading");
 				} else {
 					close(fds[i].fd);
 					fds[i].fd = -1; /* ignore all other requests */
@@ -334,14 +333,24 @@ void checkReadingConnections() {
 		}
 }
 
+/* Display queued requests */
+void displayRequests() {
+	struct Request *cr;
+	for (cr = requests.next; cr; cr = cr->next)
+		if (cr->state == ProcessingRequest) 
+			logprintf("processRequests", "%d", cr->fd);
+	logprintf("processRequests", "---");
+}
+
 /* write data to sockets */
 void processRequests() {
 	struct Request *cr;
+	/*displayRequests();*/
 	for (cr = requests.next; cr; cr = cr->next) {
 		if (cr->state != ProcessingRequest)
 			continue;
 		if (!canOpen(cr->uri)) {
-			logprintf("dissemina", "can't find ``%s''", cr->uri);
+			logprintf("processRequest", "can't find ``%s''", cr->uri);
 			if (send404(cr) == DONE) {
 				close(cr->fd);
 				cr = request_remove(cr);
@@ -349,7 +358,9 @@ void processRequests() {
 		} else {
 			if (sendPage(cr) == DONE) {
 				close(cr->fd);
+				/*logprintf("processRequest", "connection to %d closed", cr->fd);*/
 				cr = request_remove(cr);
+				/*displayRequests();*/
 			}
 		}
 	}
@@ -369,7 +380,6 @@ int main(int argc, char *argv[]) {
 		timeout = -1;
 		if (requests.next)
 			timeout = 1;
-		logprintf("dissemina", "polling");
 		if (poll(fds, NUM_FDS, timeout) == -1)
 			quit_err("poll");
 		
