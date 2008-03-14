@@ -5,7 +5,7 @@
  */
 
 /* Set DEBUG to 1 to kill all output */
-#define DEBUG 0
+#define DEBUG 1
 #define _XOPEN_SOURCE 1 /* Needed for POLLRDNORM... */
 
 #include <stdio.h>
@@ -26,7 +26,7 @@
 #define MAXREQSIZE 4096
 
 /* Maximum number of open network connections */
-#define NUM_FDS 64
+#define NUM_FDS 128
 
 /* On which port shall I listen? */
 #define LOCAL_PORT 6462
@@ -34,18 +34,26 @@
 #define DONE 1
 #define NOTDONE 0
 
+enum RequestState {
+	ReadingRequest,
+	ProcessingRequest,
+	RequestDone
+};
+
 struct Request {
 	char text[MAXREQSIZE];
 	char uri[MAXURISIZE];
 	int len;
-	char ready;
+	int fd;	/* network socket FD */
 	FILE *fi;
+	int state;
+	struct Request *next, *prev;
 };
 
 int listener;
 struct pollfd fds[NUM_FDS];
-struct Request reqs[NUM_FDS];
-int requestsReady; /* the number of requests that are ready for handling */
+struct Request *reqs2[NUM_FDS];
+struct Request requests;
 
 /* Display an error and quit */
 void quit_err(const char *s) {
@@ -146,38 +154,41 @@ const char *FileHandle[FileHandleNum][4] = {
 };
 
 /* Send file fn to s */
-int sendPage(int idx) {
-	char conttype[32];
+int sendPage(struct Request *r) {
 	int fh = 0;
 	int i;
 	for (i = 1; i < FileHandleNum; ++i)
-		if (endsWith(reqs[idx].uri, FileHandle[i][0])) {
+		if (endsWith(r->uri, FileHandle[i][0])) {
 			fh = i;
 			break;
 		}
 	
 	int len;
-	if (!reqs[idx].fi) {
-		reqs[idx].fi = fopen(reqs[idx].uri, FileHandle[fh][1]);
+	if (!r->fi) {
+		r->fi = fopen(r->uri, FileHandle[fh][1]);
 		logprintf("sendPage", "%s", FileHandle[fh][2]);
-		strcpy(conttype, FileHandle[fh][3]);
 
 		char header[256];
 		sprintf(header , "HTTP/1.1 200 OK\r\n"
 						 "Connection: close\r\n"
 						 "Content-Type: %s\r\n"
 						 "Server: Dissemina/0.0.0\r\n"
-						 "\r\n", conttype);
+						 "\r\n", FileHandle[fh][3]);
 		len = strlen(header);
-		sendall(fds[idx].fd, header, &len);
+		sendall(r->fd, header, &len);
 	}
 
-	char buf[1025];
-	if (!feof(reqs[idx].fi) && !ferror(reqs[idx].fi)) {
-		len = fread(buf, 1, 1024, reqs[idx].fi);
-		sendall(fds[idx].fd, buf, &len);
-	} else {
-		fclose(reqs[idx].fi);
+	char buf[1026];
+	memset(buf, 0, sizeof(buf));
+	if (!feof(r->fi) && !ferror(r->fi)) {
+		len = fread(buf, 1, 1024, r->fi);
+		logprintf("sendPage", "sending %d bytes to %d", len, r->fd);
+		//logprintf("sendPage", "sending ``%s''", buf);
+		sendall(r->fd, buf, &len);
+	}
+	
+	if (feof(r->fi) || ferror(r->fi) || (len < 1024)) {
+		fclose(r->fi);
 		return DONE;
 	}
 
@@ -197,24 +208,8 @@ int canOpen(const char *fn) {
 	return 1;
 }
 
-/* Send 400 Bad Request to s */
-int send400(int idx) {
-	logprintf("send400", "sending 400 Bad Request");
-
-	char text400[] = "HTTP/1.1 400 Bad Request\r\n"
-					 "Connection: close\r\n"
-					 "Content-Type: text/plain\r\n"
-					 "Server: Dissemina/0.0.0\r\n"
-					 "\r\n"
-					 "Bad Request\n";
-	int len = strlen(text400);
-	sendall(fds[idx].fd, text400, &len);
-
-	return DONE;
-}
-
 /* Send 404 Not Found to s */
-int send404(int idx) {
+int send404(struct Request *r) {
 	logprintf("send404", "problem reading requested file");
 	logprintf("send404", "sending 404 Not Found");
 
@@ -225,7 +220,7 @@ int send404(int idx) {
 					 "\r\n"
 					 "Not Found\n";
 	int len = strlen(text404);
-	sendall(fds[idx].fd, text404, &len);
+	sendall(r->fd, text404, &len);
 
 	return DONE;
 }
@@ -252,12 +247,22 @@ void setupListener() {
 	logprintf("setupListener", "*** listening on port %d ***", LOCAL_PORT);
 }
 
-void close_and_unset_fd(int i) {
-	close(fds[i].fd);
-	logprintf("listen", "socket %d closed", fds[i].fd);
-	fds[i].fd = -1;
-	reqs[i].ready = 0;
-	--requestsReady;
+/* Create a new Request and return a pointer to it */
+struct Request* request_create() {
+	struct Request *r = malloc(sizeof(struct Request));
+	memset(r, 0, sizeof(struct Request));
+	return r;
+}
+
+/* Remove a request from the requests and free() it 
+ * Returns a pointer to the PREVIOUS location */
+struct Request* request_remove(struct Request *r) {
+	struct Request *p = r->prev;
+	p->next = r->next;
+	if (r->next)
+		r->next->prev = p;
+	free(r);
+	return p;
 }
 
 /* check listener for new connections and write them into fds and reqs */
@@ -282,52 +287,72 @@ void getNewConnections() {
 
 		fds[i].fd = newfd;
 		fds[i].events = POLLRDNORM;
-		memset(&reqs[i], 0, sizeof(reqs[0]));
-		logprintf("dissemina", "connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
+		/* Create and prepend a new Request */
+		//logprintf("getNewConnections", "adding a new Request to list");
+		struct Request *nr = request_create();
+		nr->next = requests.next;
+		nr->prev = &requests;
+		nr->fd = newfd;
+		nr->state = ReadingRequest;
+		reqs2[i] = nr;
+		requests.next = nr;
+		logprintf("getNewConnections", "connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
 	}
 }
 
-/* read and write data from/to sockets */
-void processConnections() {
+/* reads data from sockets */
+void checkReadingConnections() {
 	int i;
-	/* check if there's anything to read */
 	for (i = 1; i < NUM_FDS; ++i)
 		if (fds[i].revents & POLLRDNORM) {
+			struct Request *cr = reqs2[i]; /* The current request */
 			int nbytes;
-			if ((nbytes = recv(fds[i].fd, reqs[i].text + reqs[i].len, sizeof(reqs[0].text) - reqs[i].len, 0)) <= 0) {
+			if ((nbytes = recv(fds[i].fd, cr->text + cr->len, MAXREQSIZE - cr->len, 0)) <= 0) {
 				if (nbytes == 0)
 					logprintf("dissemina", "listen: socket %d closed", fds[i].fd);
 				else
 					perror("recv");
-				close_and_unset_fd(i);
+				close(fds[i].fd);
+				fds[i].fd = -1;
+				request_remove(cr);
 			} else {
-				reqs[i].len += nbytes;
+				cr->len += nbytes;
 				//logprintf("dissemina", "data from %d: ``%s''", fds[i].fd, reqs[i].text);
-				if (!endsWith(reqs[i].text, "\r\n\r\n"))
+				if (!endsWith(cr->text, "\r\n\r\n"))
 					continue;
-				if (startsWith(reqs[i].text, "GET")) { // HTTP GET
-					reqs[i].ready = getRequestUri(reqs[i].uri, reqs[i].text + 3);
-					++requestsReady;
-				} else
+				if (startsWith(cr->text, "GET")) { // HTTP GET
+					getRequestUri(cr->uri, cr->text + 3); /* Fill in the URI */
+					cr->state = ProcessingRequest; /* Mark the request for processing */
+					fds[i].fd = -1; /* The fd won't be checked for reads anymore */
+					logprintf("checkReadingConnections", "connection ready for reading");
+				} else {
+					close(fds[i].fd);
 					fds[i].fd = -1; /* ignore all other requests */
+					request_remove(cr);
+				}
 			}
 		}
-	
-	for (i = 1; i < NUM_FDS; ++i)
-		if (reqs[i].ready) {
-			if (reqs[i].ready == -1) {
-				logprintf("dissemina", "malformed request");
-				if (send400(i) == DONE)
-					close_and_unset_fd(i);
-			} else if (!canOpen(reqs[i].uri)) {
-				logprintf("dissemina", "can't find ``%s''", reqs[i].uri);
-				if (send404(i) == DONE)
-					close_and_unset_fd(i);
-			} else {
-				if (sendPage(i) == DONE)
-					close_and_unset_fd(i);
+}
+
+/* write data to sockets */
+void processRequests() {
+	struct Request *cr;
+	for (cr = requests.next; cr; cr = cr->next) {
+		if (cr->state != ProcessingRequest)
+			continue;
+		if (!canOpen(cr->uri)) {
+			logprintf("dissemina", "can't find ``%s''", cr->uri);
+			if (send404(cr) == DONE) {
+				close(cr->fd);
+				cr = request_remove(cr);
+			}
+		} else {
+			if (sendPage(cr) == DONE) {
+				close(cr->fd);
+				cr = request_remove(cr);
 			}
 		}
+	}
 }
 
 int main(int argc, char *argv[]) {
@@ -340,18 +365,17 @@ int main(int argc, char *argv[]) {
 	fds[0].fd = listener;
 	fds[0].events = POLLRDNORM;
 	int timeout;
-	requestsReady = 0;
 	for (;;) {
 		timeout = -1;
-		if (requestsReady > 0)
+		if (requests.next)
 			timeout = 1;
 		logprintf("dissemina", "polling");
 		if (poll(fds, NUM_FDS, timeout) == -1)
 			quit_err("poll");
 		
 		getNewConnections();
-		
-		processConnections();
+		checkReadingConnections();
+		processRequests();
 	}
 
 	close(listener);
