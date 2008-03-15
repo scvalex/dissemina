@@ -1,0 +1,82 @@
+Sockets and SIGPIPEs
+====================
+
+1. Overview
+--------
+
+If you look at commit f206adf10bffe5d56b8f1841296aa4e3083e8dea, you'll see
+that it only changes one line in sendall().
+
+The diff looks like this
+
+-----------------------------
+	while (bytesleft > 0) {
+-		n = send(s, buf + total, bytesleft, 0);
++		n = send(s, buf + total, bytesleft, MSG_NOSIGNAL);
+			if (n < 0) {
+				logprintf("sendall", "trouble sending data to %d", s);
+				return;
+-----------------------------
+
+The change is in the call to the send() function. It adds the MSG_NOSIGNAL
+flag. But to understand the effect, first, you need to know what's happening.
+
+
+2. SIGPIPE
+----------
+
+The problem would appear very rarely, about once every hundred thousand
+requests. Dissemina would simply close and the shell would report ``Process
+Terminated''.
+
+Running the server through gdb, I found out that origin of the problem was
+somewhere below the send() in sendall().
+
+At first, I assumed that the problem was on my end: that I was not giving the
+length of the buffer correctly, or that the buffer might somehow be
+invalidated. As far as I could tell, everything was fine and send() had no
+reason to fail.
+
+The revelation came when I ran the programme through valgrind. It clearly
+stated the termination was due to an unhandled SIGPIPE.
+
+Now, what the hell is a SIGPIPE. Wikipedia offered the first clue:
+
+``Description: Write on a pipe with no one to read it''
+
+
+3. Solution
+-----------
+
+Unfortunately, this didn't actually enlighten me. Of course there was someone
+to read the other end of the pipe. It was the person who *initially made the
+request*. And the logic couldn't be broken; I mean it can't work for 99999 of
+the cases and fail on 1.
+
+Anyway send(2) offers a usable solution. It suggests setting MSG_NOSIGNAL flag
+(it's the fourth parameter to send).
+
+``MSG_NOSIGNAL
+	Requests  not to send SIGPIPE on errors on stream oriented
+	sockets when the other end breaks the connection.  The EPIPE
+	error is still returned.''
+
+Also, by returning EPIPE, the simple error handling mechanism would work.
+
+4. Cause of SIGPIPE
+-------------------
+
+As far as I've managed to gather from the net, SIGPIPE is sent when you try to
+send to a receiver, but, in the meantime, something has happened to it and the
+OS know about it.
+
+In this case, I'm betting it's because the client would sometimes send a TCP
+reset request and there isn't anything to handle it.
+
+5. Further thoughts
+-------------------
+
+Annoyingly, I'm now trying to handle this problem more elegantly but I can't
+reproduce it any more. Server just handled 20000000 (twenty million) requests
+without a hitch.
+
