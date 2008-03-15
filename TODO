@@ -7,6 +7,3 @@ alike, so a single function should be all that's necessary.
 Browser only supports abs_path URI requests and not absoluteURI. See
 RFC2616 5.1.2 Request-URI.
 
-Requesting the root of any directory but the root returns a Page Not
-Found error. It should return the index.xml file.
-  

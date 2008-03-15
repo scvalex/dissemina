@@ -1,5 +1,6 @@
 /*
- * dissemina.c -- very fast HTTP server
+ * dissemina.c 
+ * 		very fast webserver
  *
  * listens for GET requests on port 6462 and carries them out
  */
@@ -22,8 +23,13 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+/* Maximum size, in bytes, or URI */
 #define MAXURISIZE 1024
+/* Maximum size, in bytes, of request */
 #define MAXREQSIZE 4096
+
+/* Number of bytes sent in one go */
+#define SENDBUFSIZE 1024
 
 /* Maximum number of open network connections */
 #define NUM_FDS 128
@@ -82,7 +88,7 @@ void logprintf(char *fn, char *fmt, ...) {
 }
 
 /* Create a new Request and return a pointer to it */
-struct Request* request_create() {
+struct Request* create_request() {
 	struct Request *r = malloc(sizeof(struct Request));
 	memset(r, 0, sizeof(struct Request));
 	return r;
@@ -90,7 +96,7 @@ struct Request* request_create() {
 
 /* Remove a request from the requests and free() it 
  * Returns a pointer to the PREVIOUS location */
-struct Request* request_remove(struct Request *r) {
+struct Request* remove_and_free_request(struct Request *r) {
 	struct Request *p = r->prev;
 	p->next = r->next;
 	if (r->next)
@@ -99,16 +105,28 @@ struct Request* request_remove(struct Request *r) {
 	return p;
 }
 
+#define INEXISTANTFILE -555
+#define FILEISDIRECTORY 444
+#define OTHERFILE 2
+#define INVALIDPATH 0
+#define NORMALFILE 1
+
 /* Returns true if file should be openable */
 int canOpen(const char *fn) {
 	static struct stat s;
-	if ((stat(fn, &s) != 0) || !S_ISREG(s.st_mode))
-		return 0;
+	if (stat(fn, &s) != 0)
+		return INEXISTANTFILE;
+
+	if (S_ISDIR(s.st_mode))
+		return FILEISDIRECTORY;
+
+	if (!S_ISREG(s.st_mode))
+		return OTHERFILE;
 	
 	if (strstr(fn, ".."))
-		return 0;
+		return INVALIDPATH;
 
-	return 1;
+	return NORMALFILE;
 }
 
 /* Create the listener and return it */
@@ -142,6 +160,7 @@ void sendall(int s, const char *buf, int *len) {
 	while (bytesleft > 0) {
 		n = send(s, buf + total, bytesleft, MSG_NOSIGNAL);
 		if (n < 0) {
+			printf("trouble sending data to %d\n", s);
 			logprintf("sendall", "trouble sending data to %d", s);
 			return;
 		}
@@ -190,9 +209,6 @@ int getRequestUri(char *uri, char *buf) {
 		uri[j + 1] = *a;
 	uri[j + 1] = 0;
 
-	if ((j == 1) && (uri[1] == '/'))
-		strcpy(uri, "./index.xml");
-
 	return 1;
 }
 
@@ -230,7 +246,7 @@ int sendPage(struct Request *r) {
 		sendall(r->fd, header, &len);
 	}
 
-	char buf[1026];
+	char buf[SENDBUFSIZE + 2];
 	memset(buf, 0, sizeof(buf));
 	if (!feof(r->fi) && !ferror(r->fi)) {
 		len = fread(buf, 1, 1024, r->fi);
@@ -287,7 +303,7 @@ void getNewConnections() {
 		fds[i].events = POLLRDNORM;
 		/* Create and prepend a new Request */
 		//logprintf("getNewConnections", "adding a new Request to list");
-		struct Request *nr = request_create();
+		struct Request *nr = create_request();
 		nr->next = requests.next;
 		if (nr->next)
 			nr->next->prev = nr;
@@ -314,7 +330,7 @@ void checkReadingConnections() {
 					perror("recv");
 				close(fds[i].fd);
 				fds[i].fd = -1;
-				request_remove(cr);
+				remove_and_free_request(cr);
 			} else {
 				cr->len += nbytes;
 				//logprintf("dissemina", "data from %d: ``%s''", fds[i].fd, reqs[i].text);
@@ -322,12 +338,13 @@ void checkReadingConnections() {
 					continue;
 				if (startsWith(cr->text, "GET")) { // HTTP GET
 					getRequestUri(cr->uri, cr->text + 3); /* Fill in the URI */
+					strcat(cr->uri, "/");
 					cr->state = ProcessingRequest; /* Mark the request for processing */
 					fds[i].fd = -1; /* The fd won't be checked for reads anymore */
 				} else {
 					close(fds[i].fd);
 					fds[i].fd = -1; /* ignore all other requests */
-					request_remove(cr);
+					remove_and_free_request(cr);
 				}
 			}
 		}
@@ -349,17 +366,22 @@ void processRequests() {
 	for (cr = requests.next; cr; cr = cr->next) {
 		if (cr->state != ProcessingRequest)
 			continue;
-		if (!canOpen(cr->uri)) {
+		int ft = canOpen(cr->uri);
+		if (ft == FILEISDIRECTORY) {
+			strcpy(cr->uri + strlen(cr->uri), "index.xml");
+			ft = canOpen(cr->uri);
+		}
+		if (ft != NORMALFILE) {
 			logprintf("processRequest", "can't find ``%s''", cr->uri);
 			if (send404(cr) == DONE) {
 				close(cr->fd);
-				cr = request_remove(cr);
+				cr = remove_and_free_request(cr);
 			}
 		} else {
 			if (sendPage(cr) == DONE) {
 				close(cr->fd);
 				/*logprintf("processRequest", "connection to %d closed", cr->fd);*/
-				cr = request_remove(cr);
+				cr = remove_and_free_request(cr);
 				/*displayRequests();*/
 			}
 		}
