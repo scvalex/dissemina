@@ -52,6 +52,7 @@ struct Request {
 	int len;
 	int fd;	/* network socket FD */
 	FILE *fi;
+	int lft; /* local file type; i,e, is it a directory, normal file or inexistant*/
 	int state;
 	struct Request *next, *prev;
 };
@@ -105,28 +106,40 @@ struct Request* remove_and_free_request(struct Request *r) {
 	return p;
 }
 
-#define INEXISTANTFILE -555
-#define FILEISDIRECTORY 444
-#define OTHERFILE 2
-#define INVALIDPATH 0
-#define NORMALFILE 1
+/* Display queued requests */
+void displayRequests() {
+	struct Request *cr;
+	for (cr = requests.next; cr; cr = cr->next)
+		if (cr->state == ProcessingRequest) 
+			logprintf("processRequests", "%d", cr->fd);
+	logprintf("processRequests", "---");
+}
 
-/* Returns true if file should be openable */
-int canOpen(const char *fn) {
+enum FileTypes {
+	InexistantFile = -555,
+	FileIsDirectory = 444,
+	OtherFileType = 2,
+	InvalidPath = 0,
+	NormalFile = 1
+};
+
+/* Returns a numeric constant that represents the file's type (directory,
+ * normal file, inexistant) */
+int get_file_type(char *fn) {
 	static struct stat s;
 	if (stat(fn, &s) != 0)
-		return INEXISTANTFILE;
+		return InexistantFile;
 
 	if (S_ISDIR(s.st_mode))
-		return FILEISDIRECTORY;
+		return FileIsDirectory;
 
 	if (!S_ISREG(s.st_mode))
-		return OTHERFILE;
+		return OtherFileType;
 	
 	if (strstr(fn, ".."))
-		return INVALIDPATH;
+		return InvalidPath;
 
-	return NORMALFILE;
+	return NormalFile;
 }
 
 /* Create the listener and return it */
@@ -193,23 +206,6 @@ int startsWith(const char *s, const char *w) {
 		++b;
 
 	return (!*a || !*b);
-}
-
-/* Returns the URI as a string */
-int getRequestUri(char *uri, char *buf) {
-	char *a = buf;
-	for (; *a == ' '; ++a);
-
-	if (*a != '/')
-		return -1;
-
-	uri[0] = '.';
-	int j;
-	for (j = 0; *a && !isspace(*a) && (j < MAXURISIZE - 2); ++j, ++a)
-		uri[j + 1] = *a;
-	uri[j + 1] = 0;
-
-	return 1;
 }
 
 #define FileHandleNum 5
@@ -316,6 +312,28 @@ void getNewConnections() {
 	}
 }
 
+/* fills in a Request, mainly. by looking at it's text */
+void fill_in_request(struct Request *r) {
+	char *a = r->text + 3; /* jump over the GET */
+	for (; *a == ' '; ++a);
+
+	if (*a != '/')
+		return; /* request is invalid */
+
+	r->uri[0] = '.';
+	int j;
+	for (j = 0; *a && !isspace(*a) && (j < MAXURISIZE - 2); ++j, ++a)
+		r->uri[j + 1] = *a;
+	r->uri[j + 1] = 0;
+	r->state = ProcessingRequest; /* Mark the request for processing */
+
+	r->lft = get_file_type(r->uri);
+	if (r->lft == FileIsDirectory) {
+		strcat(r->uri, "/index.xml");
+		r->lft = get_file_type(r->uri);
+	}
+}
+
 /* reads data from sockets */
 void checkReadingConnections() {
 	int i;
@@ -337,9 +355,7 @@ void checkReadingConnections() {
 				if (!endsWith(cr->text, "\r\n\r\n"))
 					continue;
 				if (startsWith(cr->text, "GET")) { // HTTP GET
-					getRequestUri(cr->uri, cr->text + 3); /* Fill in the URI */
-					strcat(cr->uri, "/");
-					cr->state = ProcessingRequest; /* Mark the request for processing */
+					fill_in_request(cr);
 					fds[i].fd = -1; /* The fd won't be checked for reads anymore */
 				} else {
 					close(fds[i].fd);
@@ -350,15 +366,6 @@ void checkReadingConnections() {
 		}
 }
 
-/* Display queued requests */
-void displayRequests() {
-	struct Request *cr;
-	for (cr = requests.next; cr; cr = cr->next)
-		if (cr->state == ProcessingRequest) 
-			logprintf("processRequests", "%d", cr->fd);
-	logprintf("processRequests", "---");
-}
-
 /* write data to sockets */
 void processRequests() {
 	struct Request *cr;
@@ -366,12 +373,7 @@ void processRequests() {
 	for (cr = requests.next; cr; cr = cr->next) {
 		if (cr->state != ProcessingRequest)
 			continue;
-		int ft = canOpen(cr->uri);
-		if (ft == FILEISDIRECTORY) {
-			strcpy(cr->uri + strlen(cr->uri), "index.xml");
-			ft = canOpen(cr->uri);
-		}
-		if (ft != NORMALFILE) {
+		if (cr->lft != NormalFile) {
 			logprintf("processRequest", "can't find ``%s''", cr->uri);
 			if (send404(cr) == DONE) {
 				close(cr->fd);
