@@ -57,13 +57,13 @@ struct Request {
 	struct Request *next, *prev;
 };
 
-int listener;
+int listener; /* fd for listener socket */
 struct pollfd fds[NUM_FDS];
-struct Request *reqs2[NUM_FDS];
+struct Request *reqs[NUM_FDS]; /* maps fds[idx] to Requests in requests */
 struct Request requests;
 
 /* Display an error and quit */
-void quit_err(const char *s) {
+void quit_err(char *s) {
 	perror(s);
 	exit(1);
 }
@@ -88,11 +88,16 @@ void logprintf(char *fn, char *fmt, ...) {
 	fprintf(stderr, "\n");
 }
 
-/* Create a new Request and return a pointer to it */
-struct Request* create_request() {
-	struct Request *r = malloc(sizeof(struct Request));
-	memset(r, 0, sizeof(struct Request));
-	return r;
+/* Creates and prepends a new Request to requests */
+struct Request* create_and_prepend_request() {
+	struct Request *nr = malloc(sizeof(struct Request)); /* create */
+	memset(nr, 0, sizeof(struct Request));
+	nr->next = requests.next;
+	if (nr->next)
+		nr->next->prev = nr; /* link with next*/
+	nr->prev = &requests;
+	requests.next = nr; /* link with head */
+	return nr;
 }
 
 /* Remove a request from the requests and free() it 
@@ -143,7 +148,7 @@ int get_file_type(char *fn) {
 }
 
 /* Create the listener and return it */
-void setupListener() {
+void setup_listener() {
 	if ((listener = socket(PF_INET, SOCK_STREAM, 0)) == -1)
 		quit_err("socket");
 
@@ -165,7 +170,7 @@ void setupListener() {
 }
 
 /* Send all data in buf to s */
-void sendall(int s, const char *buf, int *len) {
+void sendall(int s, char *buf, int *len) {
 	int total = 0,
 		bytesleft = *len,
 		n;
@@ -184,7 +189,7 @@ void sendall(int s, const char *buf, int *len) {
 }
 
 /* Returns true if s ends with w */
-int endsWith(const char *s, const char *w) {
+int endsWith(char *s, char *w) {
 	int i = strlen(s) - 1,
 		j = strlen(w) - 1;
 
@@ -197,9 +202,9 @@ int endsWith(const char *s, const char *w) {
 
 /* Returns true if s starts with w
  * NOTE: returns false if s == w */
-int startsWith(const char *s, const char *w) {
-	char *a = (char*)s,
-		 *b = (char*)w;
+int startsWith(char *s, char *w) {
+	char *a = s,
+		 *b = w;
 
 	while (*a && *b && (*a == *b))
 		++a,
@@ -209,7 +214,7 @@ int startsWith(const char *s, const char *w) {
 }
 
 #define FileHandleNum 5
-const char *FileHandle[FileHandleNum][4] = {
+char *FileHandle[FileHandleNum][4] = {
 	{"", "rb", "sending binary file", "application/octet-stream"},
 	{".txt", "r", "sending text file", "text/plain"},
 	{".c", "r", "sending text file", "text/plain"}, // should be text/x-c++src but FF refuses to open them
@@ -217,18 +222,18 @@ const char *FileHandle[FileHandleNum][4] = {
 	{".xml", "r", "sending xml document", "application/xml"}
 };
 
-/* Send file fn to s */
+/* Send file r->uri to s */
 int sendPage(struct Request *r) {
-	int fh = 0;
 	int i;
-	for (i = 1; i < FileHandleNum; ++i)
-		if (endsWith(r->uri, FileHandle[i][0])) {
-			fh = i;
-			break;
-		}
-	
 	int len;
 	if (!r->fi) {
+		int fh = 0; /* guess Content-Type from file extension */
+		for (i = 1; i < FileHandleNum; ++i)
+			if (endsWith(r->uri, FileHandle[i][0])) {
+				fh = i;
+				break;
+			}
+	
 		r->fi = fopen(r->uri, FileHandle[fh][1]);
 		logprintf("sendPage", "%s to %d", FileHandle[fh][2], r->fd);
 
@@ -236,7 +241,7 @@ int sendPage(struct Request *r) {
 		sprintf(header , "HTTP/1.1 200 OK\r\n"
 						 "Connection: close\r\n"
 						 "Content-Type: %s\r\n"
-						 "Server: Dissemina/0.0.0\r\n"
+						 "Server: Dissemina/0.0.1\r\n"
 						 "\r\n", FileHandle[fh][3]);
 		len = strlen(header);
 		sendall(r->fd, header, &len);
@@ -260,13 +265,12 @@ int sendPage(struct Request *r) {
 
 /* Send 404 Not Found to s */
 int send404(struct Request *r) {
-	logprintf("send404", "problem reading requested file");
 	logprintf("send404", "sending 404 Not Found");
 
 	char text404[] = "HTTP/1.1 404 Not Found\r\n"
 					 "Connection: close\r\n"
 					 "Content-Type: text/plain\r\n"
-					 "Server: Dissemina/0.0.0\r\n"
+					 "Server: Dissemina/0.0.1\r\n"
 					 "\r\n"
 					 "Not Found\n";
 	int len = strlen(text404);
@@ -275,39 +279,30 @@ int send404(struct Request *r) {
 	return DONE;
 }
 
-/* check listener for new connections and write them into fds and reqs */
-void getNewConnections() {
+/* check listener for new connections and write them into fds and requests  */
+void get_new_connections() {
 	if (fds[0].revents & POLLRDNORM) {
 		struct sockaddr_in remoteaddr;
 		socklen_t addrlen = sizeof(remoteaddr);
 		int newfd;
-		if ((newfd = accept(listener, (struct sockaddr*)&remoteaddr, &addrlen)) == -1) {
-			perror("accept");
-			return;
-		}
+		if ((newfd = accept(listener, (struct sockaddr*)&remoteaddr, &addrlen)) == -1)
+			quit_err("accept");
 
 		int i;
-		for (i = 1; i < NUM_FDS; ++i)
-			if (fds[i].fd == -1)
-				break;
+		for (i = 1; (i < NUM_FDS) && (fds[i].fd != -1); ++i)
+			;
 		if (i == NUM_FDS) {
 			logprintf("dissemina", "too many open connections; dropping a new one");
 			return;
 		}
 
-		fds[i].fd = newfd;
+		fds[i].fd = newfd; /* now listening on newfd for data to read; this is used by poll() */
 		fds[i].events = POLLRDNORM;
 		/* Create and prepend a new Request */
-		//logprintf("getNewConnections", "adding a new Request to list");
-		struct Request *nr = create_request();
-		nr->next = requests.next;
-		if (nr->next)
-			nr->next->prev = nr;
-		nr->prev = &requests;
+		struct Request *nr = create_and_prepend_request();
 		nr->fd = newfd;
 		nr->state = ReadingRequest;
-		reqs2[i] = nr;
-		requests.next = nr;
+		reqs[i] = nr;
 		logprintf("getNewConnections", "connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
 	}
 }
@@ -317,29 +312,32 @@ void fill_in_request(struct Request *r) {
 	char *a = r->text + 3; /* jump over the GET */
 	for (; *a == ' '; ++a);
 
-	if (*a != '/')
+	if (*a != '/') {
+		r->lft = InexistantFile;
+		r->state = ProcessingRequest;
 		return; /* request is invalid */
+	}
 
-	r->uri[0] = '.';
+	r->uri[0] = '.'; /* request starts with a slash; prepend a dot so that it's a valid path */
 	int j;
 	for (j = 0; *a && !isspace(*a) && (j < MAXURISIZE - 2); ++j, ++a)
 		r->uri[j + 1] = *a;
 	r->uri[j + 1] = 0;
 	r->state = ProcessingRequest; /* Mark the request for processing */
 
-	r->lft = get_file_type(r->uri);
+	r->lft = get_file_type(r->uri); /* is the file valid, a directory, etc... */
 	if (r->lft == FileIsDirectory) {
-		strcat(r->uri, "/index.xml");
-		r->lft = get_file_type(r->uri);
+		strcat(r->uri, "/index.xml"); /* if a directory, you will send out the index.xml file */
+		r->lft = get_file_type(r->uri); /* check again; maybe the index does not exist */
 	}
 }
 
-/* reads data from sockets */
-void checkReadingConnections() {
+/* reads data from sockets marked by get_new_connections() */
+void check_connections_for_data() {
 	int i;
 	for (i = 1; i < NUM_FDS; ++i)
 		if (fds[i].revents & POLLRDNORM) {
-			struct Request *cr = reqs2[i]; /* The current request */
+			struct Request *cr = reqs[i]; /* The current request */
 			int nbytes;
 			if ((nbytes = recv(fds[i].fd, cr->text + cr->len, MAXREQSIZE - cr->len, 0)) <= 0) {
 				if (nbytes == 0)
@@ -352,14 +350,14 @@ void checkReadingConnections() {
 			} else {
 				cr->len += nbytes;
 				//logprintf("dissemina", "data from %d: ``%s''", fds[i].fd, reqs[i].text);
-				if (!endsWith(cr->text, "\r\n\r\n"))
+				if (!endsWith(cr->text, "\r\n\r\n")) /* a HTTP request ends with \r\n\r\n */
 					continue;
-				if (startsWith(cr->text, "GET")) { // HTTP GET
-					fill_in_request(cr);
+				if (startsWith(cr->text, "GET")) { // is it HTTP GET?
+					fill_in_request(cr); /* extract data from request text and fill in the other fields*/
 					fds[i].fd = -1; /* The fd won't be checked for reads anymore */
-				} else {
+				} else { /* ignore all other requests */
 					close(fds[i].fd);
-					fds[i].fd = -1; /* ignore all other requests */
+					fds[i].fd = -1;	
 					remove_and_free_request(cr);
 				}
 			}
@@ -367,14 +365,12 @@ void checkReadingConnections() {
 }
 
 /* write data to sockets */
-void processRequests() {
+void process_requests() {
 	struct Request *cr;
-	/*displayRequests();*/
 	for (cr = requests.next; cr; cr = cr->next) {
-		if (cr->state != ProcessingRequest)
+		if (cr->state != ProcessingRequest) /* Is the request ready for processing? */
 			continue;
 		if (cr->lft != NormalFile) {
-			logprintf("processRequest", "can't find ``%s''", cr->uri);
 			if (send404(cr) == DONE) {
 				close(cr->fd);
 				cr = remove_and_free_request(cr);
@@ -382,34 +378,32 @@ void processRequests() {
 		} else {
 			if (sendPage(cr) == DONE) {
 				close(cr->fd);
-				/*logprintf("processRequest", "connection to %d closed", cr->fd);*/
 				cr = remove_and_free_request(cr);
-				/*displayRequests();*/
 			}
 		}
 	}
 }
 
 int main(int argc, char *argv[]) {
-	setupListener();
+	setup_listener();
 
 	int i;
 	for (i = 0; i < NUM_FDS; ++i)
-		fds[i].fd = -1;
+		fds[i].fd = -1;	/* fds that are -1 are ignored by poll() */
 
 	fds[0].fd = listener;
 	fds[0].events = POLLRDNORM;
 	int timeout;
 	for (;;) {
-		timeout = -1;
+		timeout = -1; /* a negative timeout means poll forever */
 		if (requests.next)
-			timeout = 1;
+			timeout = 0; /* if there's a reqeust ready, timeout immediately */
 		if (poll(fds, NUM_FDS, timeout) == -1)
 			quit_err("poll");
 		
-		getNewConnections();
-		checkReadingConnections();
-		processRequests();
+		get_new_connections();
+		check_connections_for_data();
+		process_requests();
 	}
 
 	close(listener);
