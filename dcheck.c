@@ -15,8 +15,15 @@
 #include <sys/socket.h>
 
 #define TARGET_PORT 6462
-#define BUFSIZE 4096
-#define DEBUG 0
+#define BUFSIZE 16384
+
+enum MessageCategories {
+	InfoMsg = 1,
+	WarnMsg = 2,
+	ErrMsg  = 4
+};
+
+int PrintableMsgs = InfoMsg + WarnMsg + ErrMsg;  /* Categories of messages to print */
 
 int sockfd; /* FD for the socket to server */
 
@@ -34,20 +41,20 @@ void quit_err(char *s) {
 
 /* Return the current ctime as a string */
 char* getCurrentTime() {
-	time_t t = time(0);
-	static char tmp[26];
-	ctime_r(&t, tmp);
-	tmp[strlen(tmp)-1] = 0;
+	time_t t = time(NULL);
+	struct tm *ltm = localtime(&t);
+	static char tmp[64];
+	strftime(tmp, sizeof(tmp), "%T", ltm);
 	return tmp;
 }
 
 /* Output a warning */
-void logprintf(char *fn, char *fmt, ...) {
-	if (!DEBUG)
+void logprintf(int cat, char *fmt, ...) {
+	if ((PrintableMsgs & cat) == 0)
 		return;
 	va_list ap;
 	va_start(ap, fmt);
-	fprintf(stderr, "%16s: %s: ", fn, getCurrentTime());
+	fprintf(stderr, "%s: ", getCurrentTime());
 	vfprintf(stderr, fmt, ap);
 	fprintf(stderr, "\n");
 }
@@ -60,7 +67,7 @@ void sendall(int s, char *buf, int len) {
 	while (bytesleft > 0) {
 		n = send(s, buf + total, bytesleft, MSG_NOSIGNAL);
 		if (n < 0) {
-			logprintf("sendall", "trouble sending data to %d\n", s);
+			logprintf(ErrMsg, "trouble sending data to %d", s);
 			return;
 		}
 		total += n;
@@ -78,7 +85,7 @@ int recvall(int s, char *buf, int size) {
 	if (nbytes < 0)
 		return -1;
 
-	logprintf("recvall", "socket %d closed", s);
+	logprintf(InfoMsg, "socket %d closed", s);
 	close(s);
 
 	return got;
@@ -110,9 +117,9 @@ void setup_and_connect_socket() {
 void GET(char *fp) {
 	char buf[1024];
 	sprintf(buf, "GET %s HTTP/1.1\r\n\r\n", fp);
-	printf("Sending GET...\n");
+	logprintf(InfoMsg, "Sending GET...");
 	sendall(sockfd, buf, strlen(buf));
-	printf("Done\n");
+	logprintf(InfoMsg, "Done");
 
 	if ((condata_size = recvall(sockfd, condata, BUFSIZE)) == -1)
 		quit_err("recv");
@@ -123,27 +130,34 @@ void GET(char *fp) {
 void extract_data() {
 	char *aux;
 
-	printf("Extracting data...\n");
+	logprintf(InfoMsg, "Extracting data...");
 	if ((aux = strstr(condata, "\r\n\r\n")) == 0) {
-		logprintf("extact_data", "no data to extract");
+		logprintf(ErrMsg, "no data to extract");
 		return;
 	}
 
 	filedata_size = condata_size - (aux - condata) - 4;
 	memcpy(filedata, aux + 4, filedata_size); /* 4 is \r\n\r\n */
-	printf("Done\n");
+	logprintf(InfoMsg, "Done");
+}
+
+/* sets up a socket, GET fp, fills in the variables and closes the
+ * socket 
+ * USE this and not low-level GET */
+void doGET(char *fp) {
+	setup_and_connect_socket();
+
+	GET(fp);
+	logprintf(InfoMsg, "Received %d bytes", condata_size);
+	extract_data();
+	logprintf(InfoMsg, "Received %d bytes of data", filedata_size);
+
+	close(sockfd);
 }
 
 int main(int argc, char *argv[]) {
-	setup_and_connect_socket();
-
-	GET("/dcheck.c");
-	printf("Received %d bytes\n", condata_size);
-	extract_data();
-	printf("Received %d bytes of data\n", filedata_size);
-	printf("``%s''\n", filedata);
-
-	close(sockfd);
+	doGET("/file100.txt");
+	doGET("/file1024.txt");
 
 	return 0;
 }
