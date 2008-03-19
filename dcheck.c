@@ -23,7 +23,7 @@ enum MessageCategories {
 	ErrMsg  = 4
 };
 
-int PrintableMsgs = InfoMsg + WarnMsg + ErrMsg;  /* Categories of messages to print */
+int PrintableMsgs = ErrMsg;  /* Categories of messages to print */
 
 int sockfd; /* FD for the socket to server */
 
@@ -32,6 +32,8 @@ int condata_size; /* size of data received (with headers) */
 
 char filedata[BUFSIZE + 1]; /* file received from server (the part after the header) */
 int filedata_size; /* the size of the file data received from the server */
+
+int doChecks; /* if 1, check lines are interpreted */
 
 /* Display an error and quit */
 void quit_err(char *s) {
@@ -58,6 +60,40 @@ void logprintf(int cat, char *fmt, ...) {
 	vfprintf(stderr, fmt, ap);
 	fprintf(stderr, "\n");
 }
+
+/* Returns 1 if s starts with w */
+int starts_with(char *s, char *w) {
+	char *a = s,
+		 *b = w;
+
+	while (*a && *b && (*a == *b))
+		++a,
+		++b;
+
+	return (!*a || !*b);
+}
+
+/* Returns 1 if c is either space or tab; 0 otherwise */
+int iswhite(char c) {
+	return (c == ' ') || (c == '\t');
+}
+
+/* Rturns a pointer to first not whitespace character in string */
+char* skipwhite(char *c) {
+	while (*c && iswhite(*c))
+		++c;
+	return c;
+}
+
+/* Retruns 1 if line starts with ``(whitespace)*#'' or if line is empty */
+int iscomment(char *l) {
+	if (*l == '\n')
+		return 1;
+	while (*l && iswhite(*l))
+		++l;
+	return *l && (*l == '#');
+}
+
 /* Send all data in buf to s */
 void sendall(int s, char *buf, int len) {
 	int total = 0,
@@ -155,9 +191,77 @@ void doGET(char *fp) {
 	close(sockfd);
 }
 
+void doCommand(char *line) {
+	if (starts_with(line, "GET")) {
+		char *url = line + 4; /* jump GET */
+		url[strlen(url) - 1] = 0; /* cut trailing newline */
+		doGET(url);
+		doChecks = 1;
+		return;
+	}
+	logprintf(ErrMsg, "unknown command: %s", line);
+	doChecks = 0;
+}
+
+void doCheck(char *line) {
+	if (!doChecks) {
+		logprintf(ErrMsg, "ignoring check: %s", line);
+		return;
+	}
+
+	line = skipwhite(line);
+	if (starts_with(line, "status")) {
+		int estatus; /* expected status */
+		sscanf(line + 6, "%d", &estatus);
+		int gstatus; /* got status */
+		sscanf(strchr(condata, ' '), "%d", &gstatus);
+		logprintf(InfoMsg, "checking status (%d against %d)", estatus, gstatus);
+		if (gstatus == estatus)
+			printf("OK status messages match (%d == %d)\n", estatus, gstatus);
+		else
+			printf("FAILED status messages don't match (%d != %d)\n", estatus, gstatus);
+		return;
+	}
+	if (starts_with(line, "data")) {
+		char *fn = line + 4;
+		fn = skipwhite(fn);
+		fn[strlen(fn) - 1] = 0;
+		logprintf(InfoMsg, "checking data (received data against file %s)", fn);
+		
+		char edata[BUFSIZE]; /* expected data */
+		FILE *f = fopen(fn, "rb");
+		int rb = fread(edata, 1, BUFSIZE, f);
+		fclose(f);
+
+		if (memcmp(edata, filedata, rb) == 0)
+			printf("OK data received matches disk version (%s)\n", fn);
+		else
+			printf("FAILED data received doesn't match disk version (%s)\n", fn);
+
+		return;
+	}
+
+	logprintf(ErrMsg, "unknown check: %s", line);
+}
+
 int main(int argc, char *argv[]) {
-	doGET("/file100.txt");
-	doGET("/file1024.txt");
+	char line[1024];
+	doChecks = 0;
+	for (;;) {
+		fgets(line, sizeof(line), stdin);
+		if (feof(stdin))
+			break;
+
+		if (iscomment(line)) {
+			/* logprintf(InfoMsg, "comment: %s", line); */
+			continue;
+		}
+		if (iswhite(line[0]))
+			doCheck(line);
+		else
+			doCommand(line);
+		logprintf(InfoMsg, "---");
+	}
 
 	return 0;
 }

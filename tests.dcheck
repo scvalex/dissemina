@@ -1,0 +1,18 @@
+# Get a 100 byte file and check it agaist
+# version on disk
+GET /file100.txt
+	status 200
+	data file100.txt
+
+# Same as above but with a 1024 byte file
+GET /file1024.txt
+	status 200
+	data file1024.txt
+
+# Try to get an inexistant file
+GET /noWayThisExists
+	status 404
+
+POST /vah.cgi
+	status 200
+
