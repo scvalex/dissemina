@@ -35,12 +35,15 @@ int filedata_size; /* the size of the file data received from the server */
 
 int doChecks; /* if 1, check lines are interpreted */
 
+char linebuf[1024]; /* current line read from file */
+char *line;
+
 /* Display an error and quit */
 void quit_err(char *s) {
 	perror(s);
 	exit(1);
 }
-
+ 
 /* Return the current ctime as a string */
 char* getCurrentTime() {
 	time_t t = time(NULL);
@@ -178,8 +181,7 @@ void extract_data() {
 }
 
 /* sets up a socket, GET fp, fills in the variables and closes the
- * socket 
- * USE this and not low-level GET */
+ * socket */
 void doGET(char *fp) {
 	setup_and_connect_socket();
 
@@ -191,7 +193,8 @@ void doGET(char *fp) {
 	close(sockfd);
 }
 
-void doCommand(char *line) {
+/* high-level for commands */
+void doCommand() {
 	if (starts_with(line, "GET")) {
 		char *url = line + 4; /* jump GET */
 		url[strlen(url) - 1] = 0; /* cut trailing newline */
@@ -199,68 +202,73 @@ void doCommand(char *line) {
 		doChecks = 1;
 		return;
 	}
-	logprintf(ErrMsg, "unknown command: %s", line);
+	logprintf(WarnMsg, "unknown command: %s", line);
 	doChecks = 0;
 }
 
-void doCheck(char *line) {
+/* check status against that specified in line */
+void checkStatus() {
+	int estatus; /* expected status */
+	sscanf(line + 6, "%d", &estatus);
+	int gstatus; /* got status */
+	sscanf(strchr(condata, ' '), "%d", &gstatus);
+	printf("# check status (%d against %d)\n", estatus, gstatus);
+	if (gstatus == estatus)
+		printf("OK\n");
+	else
+		printf("FAILED\n");
+}
+
+/* check data against that in file */
+void checkData() {
+	char *fn = line + 4;
+	fn = skipwhite(fn);
+	fn[strlen(fn) - 1] = 0;
+	logprintf(InfoMsg, "checking data (received data against file %s)", fn);
+	
+	char edata[BUFSIZE]; /* expected data */
+	FILE *f = fopen(fn, "rb");
+	int rb = fread(edata, 1, BUFSIZE, f);
+	fclose(f);
+
+	printf("# check data against file %s\n", fn);
+	if (memcmp(edata, filedata, rb) == 0)
+		printf("OK\n");
+	else
+		printf("FAILED\n");
+}
+
+/* high-level for check* functions */
+void doCheck() {
 	if (!doChecks) {
-		logprintf(ErrMsg, "ignoring check: %s", line);
+		logprintf(WarnMsg, "ignoring check: %s", line);
 		return;
 	}
 
 	line = skipwhite(line);
-	if (starts_with(line, "status")) {
-		int estatus; /* expected status */
-		sscanf(line + 6, "%d", &estatus);
-		int gstatus; /* got status */
-		sscanf(strchr(condata, ' '), "%d", &gstatus);
-		logprintf(InfoMsg, "checking status (%d against %d)", estatus, gstatus);
-		if (gstatus == estatus)
-			printf("OK status messages match (%d == %d)\n", estatus, gstatus);
-		else
-			printf("FAILED status messages don't match (%d != %d)\n", estatus, gstatus);
-		return;
-	}
-	if (starts_with(line, "data")) {
-		char *fn = line + 4;
-		fn = skipwhite(fn);
-		fn[strlen(fn) - 1] = 0;
-		logprintf(InfoMsg, "checking data (received data against file %s)", fn);
-		
-		char edata[BUFSIZE]; /* expected data */
-		FILE *f = fopen(fn, "rb");
-		int rb = fread(edata, 1, BUFSIZE, f);
-		fclose(f);
+	if (starts_with(line, "status"))
+		checkStatus();
+	else if (starts_with(line, "data"))
+		checkData();
 
-		if (memcmp(edata, filedata, rb) == 0)
-			printf("OK data received matches disk version (%s)\n", fn);
-		else
-			printf("FAILED data received doesn't match disk version (%s)\n", fn);
-
-		return;
-	}
-
-	logprintf(ErrMsg, "unknown check: %s", line);
+	logprintf(WarnMsg, "unknown check: %s", line);
 }
 
 int main(int argc, char *argv[]) {
-	char line[1024];
 	doChecks = 0;
 	for (;;) {
-		fgets(line, sizeof(line), stdin);
+		fgets(linebuf, sizeof(linebuf), stdin);
 		if (feof(stdin))
 			break;
+		line = linebuf; /* linebuf is const char*, line is char* */
 
 		if (iscomment(line)) {
-			/* logprintf(InfoMsg, "comment: %s", line); */
-			continue;
-		}
-		if (iswhite(line[0]))
-			doCheck(line);
+			if (line[0] != '\n')
+				printf(line);
+		} else if (iswhite(line[0]))
+			doCheck();
 		else
-			doCommand(line);
-		logprintf(InfoMsg, "---");
+			doCommand();
 	}
 
 	return 0;

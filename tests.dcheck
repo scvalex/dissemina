@@ -1,18 +1,34 @@
-# Get a 100 byte file and check it agaist
-# version on disk
+# GET 100 byte file
 GET /file100.txt
 	status 200
 	data file100.txt
 
-# Same as above but with a 1024 byte file
+# GET and 1K byte file
 GET /file1024.txt
 	status 200
 	data file1024.txt
 
-# Try to get an inexistant file
+# Try to GET an inexistant file
 GET /noWayThisExists
 	status 404
 
+# GET root
+GET /
+	status 200
+
+# GET root of some other directory
+GET /vah
+	status 200
+
+# GET root of some other directory with a trailing slash
+GET /vah/
+	status 200
+
+# try to cd out of server environment
+GET /../README
+	status 404
+
+# try an inexistant command
 POST /vah.cgi
 	status 200
 
