@@ -228,8 +228,11 @@ void checkData() {
 	
 	char edata[BUFSIZE]; /* expected data */
 	FILE *f = fopen(fn, "rb");
-	int rb = fread(edata, 1, BUFSIZE, f);
-	fclose(f);
+	int rb;
+	if (f) {
+		rb = fread(edata, 1, BUFSIZE, f);
+		fclose(f);
+	}
 
 	printf("# check data against file %s\n", fn);
 	if (memcmp(edata, filedata, rb) == 0)

@@ -11,6 +11,6 @@ dcheck: dcheck.c
 
 runtests: dissemina dcheck
 	./dissemina &
-	echo `cat tests.dcheck | ./dcheck | grep FAILED`
+	cat tests.dcheck | ./dcheck | grep FAILED || pkill dissemina
 	pkill dissemina
 
