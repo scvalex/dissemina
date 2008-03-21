@@ -10,3 +10,6 @@ dcheck.c:
   * dcheck server checking programme
   * I use this to run automated tests on dissemina
 
+dstdio.h:
+  * standard printing functions
+

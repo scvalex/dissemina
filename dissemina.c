@@ -9,14 +9,12 @@
 #define DEBUG 0
 #define _XOPEN_SOURCE 1 /* Needed for POLLRDNORM... */
 
-#include <stdio.h>
+#include "dstdio.h"
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <ctype.h>
 #include <poll.h>
 #include <unistd.h>
-#include <stdarg.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -35,7 +33,7 @@
 #define NUM_FDS 128
 
 /* On which port shall I listen? */
-#define LOCAL_PORT 6462
+const int LOCAL_PORT = 6462;
 
 #define DONE 1
 #define NOTDONE 0
@@ -62,30 +60,12 @@ struct pollfd fds[NUM_FDS];
 struct Request *reqs[NUM_FDS]; /* maps fds[idx] to Requests in requests */
 struct Request requests;
 
+int PrintableMsgs = ErrMsg; /* SEE dstdio.h */
+
 /* Display an error and quit */
-void quit_err(char *s) {
+void quit_err(const char *s) {
 	perror(s);
 	exit(1);
-}
-
-/* Return the current ctime as a string */
-char* getCurrentTime() {
-	time_t t = time(0);
-	static char tmp[26];
-	ctime_r(&t, tmp);
-	tmp[strlen(tmp)-1] = 0;
-	return tmp;
-}
-
-/* Output a warning */
-void logprintf(char *fn, char *fmt, ...) {
-	if (!DEBUG)
-		return;
-	va_list ap;
-	va_start(ap, fmt);
-	fprintf(stderr, "%16s: %s: ", fn, getCurrentTime());
-	vfprintf(stderr, fmt, ap);
-	fprintf(stderr, "\n");
 }
 
 /* Creates and prepends a new Request to requests */
@@ -116,8 +96,8 @@ void displayRequests() {
 	struct Request *cr;
 	for (cr = requests.next; cr; cr = cr->next)
 		if (cr->state == ProcessingRequest) 
-			logprintf("processRequests", "%d", cr->fd);
-	logprintf("processRequests", "---");
+			logprintf(InfoMsg, "%d", cr->fd);
+	logprintf(InfoMsg, "---");
 }
 
 enum FileTypes {
@@ -130,7 +110,7 @@ enum FileTypes {
 
 /* Returns a numeric constant that represents the file's type (directory,
  * normal file, inexistant) */
-int get_file_type(char *fn) {
+int get_file_type(const char *fn) {
 	static struct stat s;
 	if (stat(fn, &s) != 0)
 		return InexistantFile;
@@ -166,11 +146,11 @@ void setup_listener() {
 
 	if (listen(listener, 10) == -1)
 		quit_err("listen");
-	logprintf("setupListener", "*** listening on port %d ***", LOCAL_PORT);
+	logprintf(MustPrintMsg, "listening on port %d", LOCAL_PORT);
 }
 
 /* Send all data in buf to s */
-void sendall(int s, char *buf, int *len) {
+void sendall(int s, const char *buf, int *len) {
 	int total = 0,
 		bytesleft = *len,
 		n;
@@ -178,8 +158,7 @@ void sendall(int s, char *buf, int *len) {
 	while (bytesleft > 0) {
 		n = send(s, buf + total, bytesleft, MSG_NOSIGNAL);
 		if (n < 0) {
-			printf("trouble sending data to %d\n", s);
-			logprintf("sendall", "trouble sending data to %d", s);
+			logprintf(ErrMsg, "trouble sending data to %d", s);
 			return;
 		}
 		total += n;
@@ -189,7 +168,7 @@ void sendall(int s, char *buf, int *len) {
 }
 
 /* Returns true if s ends with w */
-int endsWith(char *s, char *w) {
+int endsWith(const char *s, const char *w) {
 	int i = strlen(s) - 1,
 		j = strlen(w) - 1;
 
@@ -202,9 +181,9 @@ int endsWith(char *s, char *w) {
 
 /* Returns true if s starts with w
  * NOTE: returns false if s == w */
-int startsWith(char *s, char *w) {
-	char *a = s,
-		 *b = w;
+int startsWith(const char *s, const char *w) {
+	char *a = (char*)s,
+		 *b = (char*)w;
 
 	while (*a && *b && (*a == *b))
 		++a,
@@ -214,7 +193,7 @@ int startsWith(char *s, char *w) {
 }
 
 #define FileHandleNum 5
-char *FileHandle[FileHandleNum][4] = {
+const char *FileHandle[FileHandleNum][4] = {
 	{"", "rb", "sending binary file", "application/octet-stream"},
 	{".txt", "r", "sending text file", "text/plain"},
 	{".c", "r", "sending text file", "text/plain"}, // should be text/x-c++src but FF refuses to open them
@@ -235,7 +214,7 @@ int sendPage(struct Request *r) {
 			}
 	
 		r->fi = fopen(r->uri, FileHandle[fh][1]);
-		logprintf("sendPage", "%s to %d", FileHandle[fh][2], r->fd);
+		logprintf(InfoMsg, "%s to %d", FileHandle[fh][2], r->fd);
 
 		char header[256];
 		sprintf(header , "HTTP/1.1 200 OK\r\n"
@@ -251,7 +230,7 @@ int sendPage(struct Request *r) {
 	memset(buf, 0, sizeof(buf));
 	if (!feof(r->fi) && !ferror(r->fi)) {
 		len = fread(buf, 1, 1024, r->fi);
-		/* logprintf("sendPage", "sending %d bytes to %d", len, r->fd); */
+		/* logprintf(InfoMsg, "sending %d bytes to %d", len, r->fd); */
 		sendall(r->fd, buf, &len);
 	}
 	
@@ -265,7 +244,7 @@ int sendPage(struct Request *r) {
 
 /* Send 404 Not Found to s */
 int send404(struct Request *r) {
-	logprintf("send404", "sending 404 Not Found");
+	logprintf(InfoMsg, "sending 404 Not Found");
 
 	char text404[] = "HTTP/1.1 404 Not Found\r\n"
 					 "Connection: close\r\n"
@@ -292,7 +271,7 @@ void get_new_connections() {
 		for (i = 1; (i < NUM_FDS) && (fds[i].fd != -1); ++i)
 			;
 		if (i == NUM_FDS) {
-			logprintf("dissemina", "too many open connections; dropping a new one");
+			logprintf(WarnMsg, "too many open connections; dropping a new one");
 			return;
 		}
 
@@ -303,7 +282,7 @@ void get_new_connections() {
 		nr->fd = newfd;
 		nr->state = ReadingRequest;
 		reqs[i] = nr;
-		logprintf("getNewConnections", "connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
+		logprintf(InfoMsg, "connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
 	}
 }
 
@@ -341,7 +320,7 @@ void check_connections_for_data() {
 			int nbytes;
 			if ((nbytes = recv(fds[i].fd, cr->text + cr->len, MAXREQSIZE - cr->len, 0)) <= 0) {
 				if (nbytes == 0)
-					logprintf("dissemina", "listen: socket %d closed", fds[i].fd);
+					logprintf(InfoMsg, "listen: socket %d closed", fds[i].fd);
 				else
 					perror("recv");
 				close(fds[i].fd);
@@ -349,7 +328,7 @@ void check_connections_for_data() {
 				remove_and_free_request(cr);
 			} else {
 				cr->len += nbytes;
-				//logprintf("dissemina", "data from %d: ``%s''", fds[i].fd, reqs[i].text);
+				//logprintf(InfoMsg, "data from %d: ``%s''", fds[i].fd, reqs[i].text);
 				if (!endsWith(cr->text, "\r\n\r\n")) /* a HTTP request ends with \r\n\r\n */
 					continue;
 				if (startsWith(cr->text, "GET")) { // is it HTTP GET?

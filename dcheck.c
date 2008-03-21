@@ -1,15 +1,14 @@
 /*
- * dcheck.c -- run tests against  a webserver
+ * dcheck.c
+ * 		run tests against  a webserver
  */
 
-#include <stdio.h>
+#include "dstdio.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
-#include <time.h>
 #include <netdb.h>
-#include <stdarg.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -17,13 +16,7 @@
 #define TARGET_PORT 6462
 #define BUFSIZE 16384
 
-enum MessageCategories {
-	InfoMsg = 1,
-	WarnMsg = 2,
-	ErrMsg  = 4
-};
-
-int PrintableMsgs = ErrMsg;  /* Categories of messages to print */
+int PrintableMsgs = ErrMsg;  /* SEE dstdio.h */
 
 int sockfd; /* FD for the socket to server */
 
@@ -44,26 +37,6 @@ void quit_err(char *s) {
 	exit(1);
 }
  
-/* Return the current ctime as a string */
-char* getCurrentTime() {
-	time_t t = time(NULL);
-	struct tm *ltm = localtime(&t);
-	static char tmp[64];
-	strftime(tmp, sizeof(tmp), "%T", ltm);
-	return tmp;
-}
-
-/* Output a warning */
-void logprintf(int cat, char *fmt, ...) {
-	if ((PrintableMsgs & cat) == 0)
-		return;
-	va_list ap;
-	va_start(ap, fmt);
-	fprintf(stderr, "%s: ", getCurrentTime());
-	vfprintf(stderr, fmt, ap);
-	fprintf(stderr, "\n");
-}
-
 /* Returns 1 if s starts with w */
 int starts_with(char *s, char *w) {
 	char *a = s,
