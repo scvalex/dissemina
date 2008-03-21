@@ -10,8 +10,9 @@
 #define _XOPEN_SOURCE 1 /* Needed for POLLRDNORM... */
 
 #include "dstdio.h"
+#include "dnetio.h"
+#include "dstring.h"
 #include <stdlib.h>
-#include <string.h>
 #include <ctype.h>
 #include <poll.h>
 #include <unistd.h>
@@ -149,49 +150,6 @@ void setup_listener() {
 	logprintf(MustPrintMsg, "listening on port %d", LOCAL_PORT);
 }
 
-/* Send all data in buf to s */
-void sendall(int s, const char *buf, int *len) {
-	int total = 0,
-		bytesleft = *len,
-		n;
-
-	while (bytesleft > 0) {
-		n = send(s, buf + total, bytesleft, MSG_NOSIGNAL);
-		if (n < 0) {
-			logprintf(ErrMsg, "trouble sending data to %d", s);
-			return;
-		}
-		total += n;
-		bytesleft -= n;
-	}
-	*len = total;
-}
-
-/* Returns true if s ends with w */
-int endsWith(const char *s, const char *w) {
-	int i = strlen(s) - 1,
-		j = strlen(w) - 1;
-
-	while ((i >= 0) && (j >= 0) && (s[i] == w[j]))
-		--i,
-		--j;
-
-	return (j < 0);
-}
-
-/* Returns true if s starts with w
- * NOTE: returns false if s == w */
-int startsWith(const char *s, const char *w) {
-	char *a = (char*)s,
-		 *b = (char*)w;
-
-	while (*a && *b && (*a == *b))
-		++a,
-		++b;
-
-	return (!*a || !*b);
-}
-
 #define FileHandleNum 5
 const char *FileHandle[FileHandleNum][4] = {
 	{"", "rb", "sending binary file", "application/octet-stream"},
@@ -223,7 +181,7 @@ int sendPage(struct Request *r) {
 						 "Server: Dissemina/0.0.1\r\n"
 						 "\r\n", FileHandle[fh][3]);
 		len = strlen(header);
-		sendall(r->fd, header, &len);
+		sendall(r->fd, header, len);
 	}
 
 	char buf[SENDBUFSIZE + 2];
@@ -231,7 +189,7 @@ int sendPage(struct Request *r) {
 	if (!feof(r->fi) && !ferror(r->fi)) {
 		len = fread(buf, 1, 1024, r->fi);
 		/* logprintf(InfoMsg, "sending %d bytes to %d", len, r->fd); */
-		sendall(r->fd, buf, &len);
+		sendall(r->fd, buf, len);
 	}
 	
 	if (feof(r->fi) || ferror(r->fi) || (len < 1024)) {
@@ -253,7 +211,7 @@ int send404(struct Request *r) {
 					 "\r\n"
 					 "Not Found\n";
 	int len = strlen(text404);
-	sendall(r->fd, text404, &len);
+	sendall(r->fd, text404, len);
 
 	return DONE;
 }

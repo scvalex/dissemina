@@ -13,3 +13,9 @@ dcheck.c:
 dstdio.h:
   * standard printing functions
 
+dnetio.h:
+  * wrapper functions around send and recv
+
+dstring.h:
+  * convenience string manipulation functions
+

@@ -4,10 +4,11 @@
  */
 
 #include "dstdio.h"
+#include "dnetio.h"
+#include "dstring.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-#include <string.h>
 #include <netdb.h>
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -37,16 +38,20 @@ void quit_err(char *s) {
 	exit(1);
 }
  
-/* Returns 1 if s starts with w */
-int starts_with(char *s, char *w) {
-	char *a = s,
-		 *b = w;
+/* Receive all data from s and put it in buf */
+int recvall(int s, char *buf, int size) {
+	int nbytes;
+	int got = 0;
+	while ((got < size) && ((nbytes = recv(s, buf + got, size - got, 0)) > 0))
+		got += nbytes;
 
-	while (*a && *b && (*a == *b))
-		++a,
-		++b;
+	if (nbytes < 0)
+		return -1;
 
-	return (!*a || !*b);
+	logprintf(InfoMsg, "socket %d closed", s);
+	close(s);
+
+	return got;
 }
 
 /* Returns 1 if c is either space or tab; 0 otherwise */
@@ -68,39 +73,6 @@ int iscomment(char *l) {
 	while (*l && iswhite(*l))
 		++l;
 	return *l && (*l == '#');
-}
-
-/* Send all data in buf to s */
-void sendall(int s, char *buf, int len) {
-	int total = 0,
-		bytesleft = len,
-		n;
-
-	while (bytesleft > 0) {
-		n = send(s, buf + total, bytesleft, MSG_NOSIGNAL);
-		if (n < 0) {
-			logprintf(ErrMsg, "trouble sending data to %d", s);
-			return;
-		}
-		total += n;
-		bytesleft -= n;
-	}
-}
-
-/* Receive all data from s and put it in buf */
-int recvall(int s, char *buf, int size) {
-	int nbytes;
-	int got = 0;
-	while ((got < size) && ((nbytes = recv(s, buf + got, size - got, 0)) > 0))
-		got += nbytes;
-
-	if (nbytes < 0)
-		return -1;
-
-	logprintf(InfoMsg, "socket %d closed", s);
-	close(s);
-
-	return got;
 }
 
 /* initialises the connection to the socket and stores the FD in sockfd */
