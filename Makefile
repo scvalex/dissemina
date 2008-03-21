@@ -12,5 +12,5 @@ dcheck: dcheck.c
 runtests: dissemina dcheck
 	./dissemina &
 	cat tests.dcheck | ./dcheck | grep FAILED || pkill dissemina
-	pkill dissemina
+	pkill dissemina || true
 
