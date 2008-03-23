@@ -37,7 +37,7 @@ const int LOCAL_PORT = 6462;
 
 int listener; /* fd for listener socket */
 struct pollfd fds[NUM_FDS];
-Request *reqs[NUM_FDS]; /* maps fds[idx] to Requests in requests */
+Request *fdToRequest[NUM_FDS]; /* maps fds[idx] to Requests in readingRequests */
 
 /* This is the global list of requests.
  * It's actually a linked list of requests with the first node as a sentinel
@@ -193,7 +193,7 @@ void get_new_connections() {
 		Request *nr = create_and_prepend_request(&readingRequests);
 		nr->fd = newfd;
 		nr->state = ReadingRequest;
-		reqs[i] = nr;
+		fdToRequest[i] = nr;
 		logprintf(InfoMsg, "connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
 	}
 }
@@ -228,7 +228,7 @@ void check_connections_for_data() {
 	int i;
 	for (i = 1; i < NUM_FDS; ++i)
 		if (fds[i].revents & POLLRDNORM) {
-			Request *cr = reqs[i]; /* The current request */
+			Request *cr = fdToRequest[i]; /* The current request */
 			int nbytes;
 			if ((nbytes = recv(fds[i].fd, cr->text + cr->len, MAXREQSIZE - cr->len, 0)) <= 0) {
 				if (nbytes == 0)
