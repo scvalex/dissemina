@@ -37,8 +37,8 @@ const int LOCAL_PORT = 6462;
 
 int listener; /* fd for listener socket */
 struct pollfd fds[NUM_FDS];
-struct Request *reqs[NUM_FDS]; /* maps fds[idx] to Requests in requests */
-struct Request requests;
+Request *reqs[NUM_FDS]; /* maps fds[idx] to Requests in requests */
+Request requests;
 
 int PrintableMsgs = ErrMsg; /* SEE dstdio.h */
 
@@ -107,7 +107,7 @@ const char *FileHandle[FileHandleNum][4] = {
 };
 
 /* Send file r->uri to s */
-int sendPage(struct Request *r) {
+int sendPage(Request *r) {
 	int i;
 	int len;
 	if (!r->fi) {
@@ -148,7 +148,7 @@ int sendPage(struct Request *r) {
 }
 
 /* Send 404 Not Found to s */
-int send404(struct Request *r) {
+int send404(Request *r) {
 	logprintf(InfoMsg, "sending 404 Not Found");
 
 	char text404[] = "HTTP/1.1 404 Not Found\r\n"
@@ -183,7 +183,7 @@ void get_new_connections() {
 		fds[i].fd = newfd; /* now listening on newfd for data to read; this is used by poll() */
 		fds[i].events = POLLRDNORM;
 		/* Create and prepend a new Request */
-		struct Request *nr = create_and_prepend_request();
+		Request *nr = create_and_prepend_request(&requests);
 		nr->fd = newfd;
 		nr->state = ReadingRequest;
 		reqs[i] = nr;
@@ -192,7 +192,7 @@ void get_new_connections() {
 }
 
 /* fills in a Request, mainly. by looking at it's text */
-void fill_in_request(struct Request *r) {
+void fill_in_request(Request *r) {
 	char *a = r->text + 3; /* jump over the GET */
 	for (; *a == ' '; ++a);
 
@@ -221,7 +221,7 @@ void check_connections_for_data() {
 	int i;
 	for (i = 1; i < NUM_FDS; ++i)
 		if (fds[i].revents & POLLRDNORM) {
-			struct Request *cr = reqs[i]; /* The current request */
+			Request *cr = reqs[i]; /* The current request */
 			int nbytes;
 			if ((nbytes = recv(fds[i].fd, cr->text + cr->len, MAXREQSIZE - cr->len, 0)) <= 0) {
 				if (nbytes == 0)
@@ -250,7 +250,7 @@ void check_connections_for_data() {
 
 /* write data to sockets */
 void process_requests() {
-	struct Request *cr;
+	Request *cr;
 	for (cr = requests.next; cr; cr = cr->next) {
 		if (cr->state != ProcessingRequest) /* Is the request ready for processing? */
 			continue;
