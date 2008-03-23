@@ -19,3 +19,6 @@ dnetio.h:
 dstring.h:
   * convenience string manipulation functions
 
+drequest.h:
+  * implementation of Request and RequestList
+

@@ -21,7 +21,7 @@ int starts_with(char *s, char *w) {
 }
 
 /* Returns true if s ends with w */
-int endsWith(const char *s, const char *w) {
+int ends_with(const char *s, const char *w) {
 	int i = strlen(s) - 1,
 		j = strlen(w) - 1;
 

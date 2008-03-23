@@ -28,5 +28,17 @@ int sendall(int s, char *buf, int len) {
 	return 0;
 }
 
+/*
+ * If you were expecting to find a recvall() here, you're in for a
+ * dissapointment.
+ *
+ * I've thought about it, and there's no way to write an all purpose
+ * receiving funtion. Why? Because there's no generalised way to know when
+ * a request if done. Just look at dissemina.c. A request is considered
+ * done when ``\r\n\r\n'' is encountered and, then, the socket is NOT
+ * closed. Dcheck.c, on the other hand, waits for the other end (i.e. the
+ * server) to close the connection.
+ */
+
 #endif
 

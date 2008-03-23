@@ -12,6 +12,7 @@
 #include "dstdio.h"
 #include "dnetio.h"
 #include "dstring.h"
+#include "drequest.h"
 #include <stdlib.h>
 #include <ctype.h>
 #include <poll.h>
@@ -21,11 +22,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
-/* Maximum size, in bytes, or URI */
-#define MAXURISIZE 1024
-/* Maximum size, in bytes, of request */
-#define MAXREQSIZE 4096
 
 /* Number of bytes sent in one go */
 #define SENDBUFSIZE 1024
@@ -39,23 +35,6 @@ const int LOCAL_PORT = 6462;
 #define DONE 1
 #define NOTDONE 0
 
-enum RequestState {
-	ReadingRequest,
-	ProcessingRequest,
-	RequestDone
-};
-
-struct Request {
-	char text[MAXREQSIZE];
-	char uri[MAXURISIZE];
-	int len;
-	int fd;	/* network socket FD */
-	FILE *fi;
-	int lft; /* local file type; i,e, is it a directory, normal file or inexistant*/
-	int state;
-	struct Request *next, *prev;
-};
-
 int listener; /* fd for listener socket */
 struct pollfd fds[NUM_FDS];
 struct Request *reqs[NUM_FDS]; /* maps fds[idx] to Requests in requests */
@@ -67,38 +46,6 @@ int PrintableMsgs = ErrMsg; /* SEE dstdio.h */
 void quit_err(const char *s) {
 	perror(s);
 	exit(1);
-}
-
-/* Creates and prepends a new Request to requests */
-struct Request* create_and_prepend_request() {
-	struct Request *nr = malloc(sizeof(struct Request)); /* create */
-	memset(nr, 0, sizeof(struct Request));
-	nr->next = requests.next;
-	if (nr->next)
-		nr->next->prev = nr; /* link with next*/
-	nr->prev = &requests;
-	requests.next = nr; /* link with head */
-	return nr;
-}
-
-/* Remove a request from the requests and free() it 
- * Returns a pointer to the PREVIOUS location */
-struct Request* remove_and_free_request(struct Request *r) {
-	struct Request *p = r->prev;
-	p->next = r->next;
-	if (r->next)
-		r->next->prev = p;
-	free(r);
-	return p;
-}
-
-/* Display queued requests */
-void displayRequests() {
-	struct Request *cr;
-	for (cr = requests.next; cr; cr = cr->next)
-		if (cr->state == ProcessingRequest) 
-			logprintf(InfoMsg, "%d", cr->fd);
-	logprintf(InfoMsg, "---");
 }
 
 enum FileTypes {
@@ -166,7 +113,7 @@ int sendPage(struct Request *r) {
 	if (!r->fi) {
 		int fh = 0; /* guess Content-Type from file extension */
 		for (i = 1; i < FileHandleNum; ++i)
-			if (endsWith(r->uri, FileHandle[i][0])) {
+			if (ends_with(r->uri, FileHandle[i][0])) {
 				fh = i;
 				break;
 			}
@@ -287,9 +234,9 @@ void check_connections_for_data() {
 			} else {
 				cr->len += nbytes;
 				//logprintf(InfoMsg, "data from %d: ``%s''", fds[i].fd, reqs[i].text);
-				if (!endsWith(cr->text, "\r\n\r\n")) /* a HTTP request ends with \r\n\r\n */
+				if (!ends_with(cr->text, "\r\n\r\n")) /* a HTTP request ends with \r\n\r\n */
 					continue;
-				if (startsWith(cr->text, "GET")) { // is it HTTP GET?
+				if (starts_with(cr->text, "GET")) { // is it HTTP GET?
 					fill_in_request(cr); /* extract data from request text and fill in the other fields*/
 					fds[i].fd = -1; /* The fd won't be checked for reads anymore */
 				} else { /* ignore all other requests */
