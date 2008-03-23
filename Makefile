@@ -12,6 +12,7 @@ dcheck: dcheck.c dstdio.h dnetio.h
 runtests: dissemina dcheck
 	pkill dissemina || true
 	./dissemina &
+	sleep 1
 	cat tests.dcheck | ./dcheck | grep FAILED || true
 	pkill dissemina || true
 
