@@ -38,7 +38,14 @@ const int LOCAL_PORT = 6462;
 int listener; /* fd for listener socket */
 struct pollfd fds[NUM_FDS];
 Request *reqs[NUM_FDS]; /* maps fds[idx] to Requests in requests */
-Request requests;
+
+/* This is the global list of requests.
+ * It's actually a linked list of requests with the first node as a sentinel
+ * (i.e the first node is a Request object, but it's not used) */
+RequestList processingRequests;
+
+/* The list of requests that are currentrly beeing read into. */
+RequestList readingRequests;
 
 int PrintableMsgs = ErrMsg; /* SEE dstdio.h */
 
@@ -183,7 +190,7 @@ void get_new_connections() {
 		fds[i].fd = newfd; /* now listening on newfd for data to read; this is used by poll() */
 		fds[i].events = POLLRDNORM;
 		/* Create and prepend a new Request */
-		Request *nr = create_and_prepend_request(&requests);
+		Request *nr = create_and_prepend_request(&readingRequests);
 		nr->fd = newfd;
 		nr->state = ReadingRequest;
 		reqs[i] = nr;
@@ -237,6 +244,8 @@ void check_connections_for_data() {
 				if (!ends_with(cr->text, "\r\n\r\n")) /* a HTTP request ends with \r\n\r\n */
 					continue;
 				if (starts_with(cr->text, "GET")) { // is it HTTP GET?
+					cr = pop_request(cr);
+					prepend_request(&processingRequests, cr);
 					fill_in_request(cr); /* extract data from request text and fill in the other fields*/
 					fds[i].fd = -1; /* The fd won't be checked for reads anymore */
 				} else { /* ignore all other requests */
@@ -251,7 +260,7 @@ void check_connections_for_data() {
 /* write data to sockets */
 void process_requests() {
 	Request *cr;
-	for (cr = requests.next; cr; cr = cr->next) {
+	for (cr = processingRequests.next; cr; cr = cr->next) {
 		if (cr->state != ProcessingRequest) /* Is the request ready for processing? */
 			continue;
 		if (cr->lft != NormalFile) {
@@ -280,7 +289,7 @@ int main(int argc, char *argv[]) {
 	int timeout;
 	for (;;) {
 		timeout = -1; /* a negative timeout means poll forever */
-		if (requests.next)
+		if (processingRequests.next)
 			timeout = 0; /* if there's a reqeust ready, timeout immediately */
 		if (poll(fds, NUM_FDS, timeout) == -1)
 			quit_err("poll");

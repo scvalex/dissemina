@@ -43,33 +43,47 @@ struct request_struct {
 	struct request_struct *next, *prev;
 };
 typedef struct request_struct Request;
+typedef Request RequestList;
+
+/* Prepend a request to the specified list */
+void prepend_request(RequestList *list, Request *r) {
+	r->next = list->next;
+	if (r->next)
+		r->next->prev = r; /* link with next*/
+	r->prev = list;
+	list->next = r; /* link with head */
+}
 
 /* Creates and prepends a new Request to specified list */
-Request* create_and_prepend_request(Request *list) {
+Request* create_and_prepend_request(RequestList *list) {
 	Request *nr = malloc(sizeof(Request)); /* create */
 	memset(nr, 0, sizeof(Request));
-	nr->next = list->next;
-	if (nr->next)
-		nr->next->prev = nr; /* link with next*/
-	nr->prev = list;
-	list->next = nr; /* link with head */
+	prepend_request(list, nr);
 	return nr;
 }
 
-/* Remove a request from the requests and free()s it 
- * Returns a pointer to the PREVIOUS location */
-Request* remove_and_free_request(Request *r) {
+/* Removes a request from list and returns a
+ * pointer to it */
+Request* pop_request(Request *r) {
 	Request *p = r->prev;
 	p->next = r->next;
 	if (r->next)
 		r->next->prev = p;
-	free(r);
+	r->next = r->prev = 0;
+	return r;
+}
+
+/* Remove a request from the list and free()s it 
+ * Returns a pointer to the PREVIOUS location */
+Request* remove_and_free_request(Request *r) {
+	Request *p = r->prev;
+	free(pop_request(r));
 	return p;
 }
 
 /* Display all requests in specified list that
  * match specified state */
-void display_requests(Request *list, int state) {
+void display_requests(RequestList *list, int state) {
 	Request *cr;
 	for (cr = list->next; cr; cr = cr->next)
 		if (cr->state == state) 
