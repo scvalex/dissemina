@@ -17,6 +17,7 @@
 #include <ctype.h>
 #include <poll.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -114,7 +115,7 @@ const char *FileHandle[FileHandleNum][4] = {
 };
 
 /* Send file r->uri to s */
-int sendPage(Request *r) {
+int send_page(Request *r) {
 	int i;
 	int len;
 	if (!r->fi) {
@@ -152,6 +153,48 @@ int sendPage(Request *r) {
 	}
 
 	return NOTDONE;
+}
+
+/* send a list of the files in specified directory */
+int send_directory_listing(Request *r) {
+	DIR *dp;
+	struct dirent *ep;
+
+	char buf[4096];
+	sprintf(buf , "HTTP/1.1 200 OK\r\n"
+			   	  "Connection: close\r\n"
+				  "Content-Type: text/html\r\n"
+				  "Server: Dissemina/0.0.1\r\n"
+				  "\r\n");
+	sendall(r->fd, buf, strlen(buf));
+
+	dp = opendir(r->uri);
+	char buf2[1024];
+	char buf3[1024];
+	if (dp != NULL) {
+		sprintf(buf, "<html>\n"
+						"<head>\n"
+						"	<title>%s</title>\n"
+						"</head>\n"
+						"<body>\n"
+						"	<table>\n", r->uri);
+		while ((ep = readdir(dp))) {
+			sprintf(buf3, "%s%s", r->uri + 1, ep->d_name);
+			sprintf(buf2, "		<tr><td><a href=\"%s\">%s</a></td></tr>\n", buf3, ep->d_name);
+			strcat(buf, buf2);;
+		}
+		strcat(buf, "	</table>\n"
+					"</body>\n"
+					"</html>\n");
+		sendall(r->fd, buf, strlen(buf));
+		closedir(dp);
+	} else {
+		sprintf(buf, "<html><body>Can't list\n</body></html>");
+		sendall(r->fd, buf, strlen(buf));
+		return NOTDONE;
+	}
+
+	return DONE;
 }
 
 /* Send 404 Not Found to s */
@@ -218,8 +261,10 @@ void fill_in_request(Request *r) {
 
 	r->lft = get_file_type(r->uri); /* is the file valid, a directory, etc... */
 	if (r->lft == FileIsDirectory) {
-		strcat(r->uri, "/index.xml"); /* if a directory, you will send out the index.xml file */
-		r->lft = get_file_type(r->uri); /* check again; maybe the index does not exist */
+		if (r->uri[strlen(r->uri) - 1] != '/')
+		strcat(r->uri, "/");
+		//strcat(r->uri, "/index.xml"); /* if a directory, you will send out the index.xml file */
+		//r->lft = get_file_type(r->uri); /* check again; maybe the index does not exist */
 	}
 }
 
@@ -263,13 +308,18 @@ void process_requests() {
 	for (cr = processingRequests.next; cr; cr = cr->next) {
 		if (cr->state != ProcessingRequest) /* Is the request ready for processing? */
 			continue;
-		if (cr->lft != NormalFile) {
+		if (cr->lft == FileIsDirectory) {
+			if (send_directory_listing(cr) != DONE)
+				logprintf(ErrMsg, "problem sending directory listing of %s\n", cr->uri);
+			close(cr->fd);
+			cr = remove_and_free_request(cr);
+		} else if (cr->lft != NormalFile) {
 			if (send404(cr) == DONE) {
 				close(cr->fd);
 				cr = remove_and_free_request(cr);
 			}
 		} else {
-			if (sendPage(cr) == DONE) {
+			if (send_page(cr) == DONE) {
 				close(cr->fd);
 				cr = remove_and_free_request(cr);
 			}
