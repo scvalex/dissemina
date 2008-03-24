@@ -1,3 +1,6 @@
+fakefile: fakefile.c
+	gcc -Wall fakefile.c -o fakefile
+
 listen: listen.cpp
 	g++ -Wall listen.cpp -o listen
 
