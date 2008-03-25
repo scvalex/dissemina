@@ -28,7 +28,7 @@
 #define SENDBUFSIZE 1024
 
 /* Maximum number of open network connections */
-#define NUM_FDS 128
+#define NUM_FDS 1024
 
 /* On which port shall I listen? */
 const int LOCAL_PORT = 6462;
@@ -207,8 +207,7 @@ int send404(Request *r) {
 					 "Server: Dissemina/0.0.1\r\n"
 					 "\r\n"
 					 "Not Found\n";
-	int len = strlen(text404);
-	sendall(r->fd, text404, len);
+	sendall(r->fd, text404, strlen(text404));
 
 	return DONE;
 }
@@ -260,11 +259,19 @@ void fill_in_request(Request *r) {
 	r->state = ProcessingRequest; /* Mark the request for processing */
 
 	r->lft = get_file_type(r->uri); /* is the file valid, a directory, etc... */
+	/* if a directory is requested, first dissemina attempts to find an
+	 * index.xml and failing that send the directory listing */
 	if (r->lft == FileIsDirectory) {
-		if (r->uri[strlen(r->uri) - 1] != '/')
-		strcat(r->uri, "/");
-		//strcat(r->uri, "/index.xml"); /* if a directory, you will send out the index.xml file */
-		//r->lft = get_file_type(r->uri); /* check again; maybe the index does not exist */
+		char aux[MAXURISIZE];
+		strcpy(aux, r->uri);
+		strcat(r->uri, "/index.xml"); /* if a directory, you will send out the index.xml file */
+		r->lft = get_file_type(r->uri); /* check again; maybe the index does not exist */
+		if (r->lft == InexistantFile) {
+			r->lft = FileIsDirectory;
+			strcpy(r->uri, aux);
+			if (r->uri[strlen(r->uri) - 1] != '/')
+				strcat(r->uri, "/");
+		}
 	}
 }
 
