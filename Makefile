@@ -6,12 +6,15 @@ dissemina: dissemina.c dstdio.h drequest.h
 dissemina-debug: dissemina.c dstdio.h
 	gcc -Wall -g dissemina.c -o dissemina
 
-dcheck: dcheck.c dstdio.h dnetio.h
-	gcc -Wall dcheck.c -o dcheck
+clean:
+	rm dissemina
 
-runtests: dissemina dcheck
+distclean: clean
+realclean: clean
+
+test: dissemina dcheck
 	pkill dissemina || true
 	./dissemina &
-	cat tests.dcheck | ./dcheck | grep FAILED || true
+	cat tests.dcheck | ./dcheck -s | grep FAILED || true
 	pkill dissemina || true
 
