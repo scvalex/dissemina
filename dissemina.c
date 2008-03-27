@@ -19,7 +19,6 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -54,33 +53,6 @@ int PrintableMsgs = ErrMsg; /* SEE dstdio.h */
 void quit_err(const char *s) {
 	perror(s);
 	exit(1);
-}
-
-enum FileTypes {
-	InexistantFile = -555,
-	FileIsDirectory = 444,
-	OtherFileType = 2,
-	InvalidPath = 0,
-	NormalFile = 1
-};
-
-/* Returns a numeric constant that represents the file's type (directory,
- * normal file, inexistant) */
-int get_file_type(const char *fn) {
-	static struct stat s;
-	if (stat(fn, &s) != 0)
-		return InexistantFile;
-
-	if (S_ISDIR(s.st_mode))
-		return FileIsDirectory;
-
-	if (!S_ISREG(s.st_mode))
-		return OtherFileType;
-	
-	if (strstr(fn, ".."))
-		return InvalidPath;
-
-	return NormalFile;
 }
 
 /* Create the listener and return it */
@@ -245,8 +217,8 @@ void fill_in_request(Request *r) {
 	char *a = r->text + 3; /* jump over the GET */
 	for (; *a == ' '; ++a);
 
-	if (*a != '/') {
-		r->lft = InexistantFile;
+	if ((*a != '/') || strstr(a, "..")) { /* client might be trying to jump out of server dir */
+		r->exists = 0;
 		r->state = ProcessingRequest;
 		return; /* request is invalid */
 	}
@@ -258,20 +230,17 @@ void fill_in_request(Request *r) {
 	r->uri[j + 1] = 0;
 	r->state = ProcessingRequest; /* Mark the request for processing */
 
-	r->lft = get_file_type(r->uri); /* is the file valid, a directory, etc... */
+	r->exists = (stat(r->uri, &r->s) == 0); /* is the file valid, a directory, etc... */
 	/* if a directory is requested, first dissemina attempts to find an
 	 * index.xml and failing that send the directory listing */
-	if (r->lft == FileIsDirectory) {
-		char aux[MAXURISIZE];
-		strcpy(aux, r->uri);
-		strcat(r->uri, "/index.xml"); /* if a directory, you will send out the index.xml file */
-		r->lft = get_file_type(r->uri); /* check again; maybe the index does not exist */
-		if (r->lft == InexistantFile) {
-			r->lft = FileIsDirectory;
-			strcpy(r->uri, aux);
-			if (r->uri[strlen(r->uri) - 1] != '/')
-				strcat(r->uri, "/");
-		}
+	if (S_ISDIR(r->s.st_mode)) {
+		Request aux = *r; /* create a new request that correspondes to the index.xml in this directory*/
+		strcat(aux.uri, "/index.xml"); /* if a directory, you will send out the index.xml file */
+		aux.exists = (stat(aux.uri, &aux.s) == 0);
+		if (aux.exists) /* if the file exists */
+			*r = aux; /* replace the current request with the new one */
+		else if (r->uri[strlen(r->uri) - 1] != '/') /* there's no index.xml, so append a / to the dir */
+				strcat(r->uri, "/");				/* name so that it's clearly a directory */
 	}
 }
 
@@ -314,12 +283,12 @@ void process_requests() {
 	for (cr = processingRequests.next; cr; cr = cr->next) {
 		if (cr->state != ProcessingRequest) /* Is the request ready for processing? */
 			continue;
-		if (cr->lft == FileIsDirectory) {
+		if (S_ISDIR(cr->s.st_mode)) {
 			if (send_directory_listing(cr) != DONE)
 				logprintf(ErrMsg, "problem sending directory listing of %s\n", cr->uri);
 			close(cr->fd);
 			cr = remove_and_free_request(cr);
-		} else if (cr->lft != NormalFile) {
+		} else if (!S_ISREG(cr->s.st_mode)) {
 			if (send404(cr) == DONE) {
 				close(cr->fd);
 				cr = remove_and_free_request(cr);

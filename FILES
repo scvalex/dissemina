@@ -6,7 +6,7 @@ dissemina.c:
   * this is the main server source
   * all network logic is found here
 
-dcheck.c:
+dcheck:
   * dcheck server checking programme
   * I use this to run automated tests on dissemina
 

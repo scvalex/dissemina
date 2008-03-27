@@ -8,6 +8,7 @@
 
 #include <stdlib.h>
 #include "dstdio.h"
+#include <sys/stat.h>
 
 /* Maximum size, in bytes, or URI */
 #define MAXURISIZE 1024
@@ -33,11 +34,12 @@ struct request_struct {
 	int fd;
 	/* the stream to the local file (if one is needed) */
 	FILE *fi;
-	/* local file type; i,e, is it a directory, normal file or inexistant;
-	 * SEE the FileTypes enum */
-	int lft;
 	/* current state of the request; SEE the RequestState enum */
 	int state;
+	/* the stat strucuture of the uri */
+	struct stat s;
+	/* if non-zero, file exists and s is valid */
+	int exists;
 	/* this is a node in a linked list and these are the pointers to the next
 	 * and previous elements */
 	struct request_struct *next, *prev;
