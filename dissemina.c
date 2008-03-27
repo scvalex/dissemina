@@ -218,7 +218,6 @@ void fill_in_request(Request *r) {
 	for (; *a == ' '; ++a);
 
 	if ((*a != '/') || strstr(a, "..")) { /* client might be trying to jump out of server dir */
-		r->exists = 0;
 		r->state = ProcessingRequest;
 		return; /* request is invalid */
 	}
@@ -240,7 +239,7 @@ void fill_in_request(Request *r) {
 		if (aux.exists) /* if the file exists */
 			*r = aux; /* replace the current request with the new one */
 		else if (r->uri[strlen(r->uri) - 1] != '/') /* there's no index.xml, so append a / to the dir */
-				strcat(r->uri, "/");				/* name so that it's clearly a directory */
+			strcat(r->uri, "/");                    /* name so that it's clearly a directory */
 	}
 }
 
