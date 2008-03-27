@@ -2,7 +2,6 @@
 
 import sys, re, urllib2, sha, optparse
 
-last_comment = ""
 ignore_checks = True
 data = "" # data received from server
 headers = None # headers received from server
@@ -18,9 +17,6 @@ def errmsg(s):
 def infomsg(s):
 	if verbose > 0:
 		print "#INFO", s
-
-def do_comment(line):
-	globals()["last_comment"] = line
 
 def do_command_GET(line):
 	global data, headers, status, url
@@ -43,25 +39,24 @@ def do_command(line):
 	else:
 		errmsg("Unknown action: " + line.split()[0])
 		ignore_checks = True
-	globals()["last_comment"] = ""
 
 def do_check_status(line):
 	infomsg("checking received status (%s) against expected (%s)" %
 			(line.split()[1], status))
 	if status == line.split()[1]:
-		print "OK", last_comment 
+		print "OK"
 	else:
-		print "FAILED", last_comment
+		print "FAILED"
 
 def do_check_data(line):
 	infomsg("checking data from " + url)
 	try:
 		if sha.new(data).digest() == sha.new(open(url[1:]).read()).digest():
-			print "OK", last_comment
+			print "OK"
 			return
 	except:
 		pass
-	print "FAILED", last_comment
+	print "FAILED"
 
 def do_check(line):
 	if ignore_checks:
@@ -72,10 +67,9 @@ def do_check(line):
 		globals()["do_check_"+chk](line)
 	else:
 		errmsg("Unknown check: " + line.split()[0])
-	globals()["last_comment"] = ""
 
 patmatchact = {"^[\t ]*\n"     : lambda(l): None,	# match an empty line
-			   "^[\t ]*#"      : do_comment,		# match a comment
+	 		   "^[\t ]*#"      : lambda(l): None,	# match a comment
 			   "^[A-z_]"       : do_command,		# match a command
 			   "^[\t ]+[A-z_]" : do_check,			# match a check
 			   }
