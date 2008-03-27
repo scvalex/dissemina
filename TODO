@@ -1,6 +1,9 @@
 BUGS
 ====
 
+Server sometimes crashes. It's hard to duplicate conditions and I
+haven't figured out what's causing it.
+
 Error pages are each sent by a different function. All error pages look
 alike, so a single function should be all that's necessary.
 

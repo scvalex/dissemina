@@ -19,66 +19,66 @@ def infomsg(s):
 	if verbose > 0:
 		print "#INFO", s
 
-def show_last_comment():
-	global last_comment
-	if last_comment and (verbose > 0):
-		print last_comment,
-		last_comment = None
-
 def do_comment(line):
 	globals()["last_comment"] = line
 
+def do_command_GET(line):
+	global data, headers, status, url
+	url = line.split()[1]
+	infomsg("getting %s from server" % (url))
+	status = "200"
+	try:
+		x = urllib2.urlopen(server + url)
+		data = x.read()
+		headers = x.info()
+	except urllib2.HTTPError, e:
+		status = re.match("[A-z ]*([0-9]*)", e.__str__()).groups()[0]
+
 def do_command(line):
-	global ignore_checks, data, headers, status, url
+	global ignore_checks
 	ignore_checks = False
-	data, headers, url = "", None, ""
-	if re.match("^GET", line):
-		url = line.split()[1]
-		status = "200"
-		try:
-			x = urllib2.urlopen(server + url)
-			data = x.read()
-			headers = x.info()
-		except urllib2.HTTPError, e:
-			status = re.match("[A-z ]*([0-9]*)", e.__str__()).groups()[0]
+	com = line.split()[0]
+	if globals().has_key("do_command_" + com):
+		globals()["do_command_"+com](line)
 	else:
 		errmsg("Unknown action: " + line.split()[0])
 		ignore_checks = True
+	globals()["last_comment"] = ""
+
+def do_check_status(line):
+	infomsg("checking received status (%s) against expected (%s)" %
+			(line.split()[1], status))
+	if status == line.split()[1]:
+		print "OK", last_comment 
+	else:
+		print "FAILED", last_comment
+
+def do_check_data(line):
+	infomsg("checking data from " + url)
+	try:
+		if sha.new(data).digest() == sha.new(open(url[1:]).read()).digest():
+			print "OK", last_comment
+			return
+	except:
+		pass
+	print "FAILED", last_comment
 
 def do_check(line):
 	if ignore_checks:
 		return
 	line = line.strip()
-	if re.match("^status", line):
-		show_last_comment()
-		infomsg("checking received status (%s) against expected (%s)" %
-				(line.split()[1], status))
-		if status == line.split()[1]:
-			print "OK"
-		else:
-			print "FAILED"
-	elif re.match("^data", line):
-		infomsg("checking data from " + url)
-		try:
-			if sha.new(data).digest() == sha.new(open(url[1:]).read()).digest():
-				print "OK"
-			else:
-				print "FAILED"
-		except:
-			print "FAILED"
+	chk = line.split()[0]
+	if globals().has_key("do_check_" + chk):
+		globals()["do_check_"+chk](line)
 	else:
 		errmsg("Unknown check: " + line.split()[0])
+	globals()["last_comment"] = ""
 
-matchpats = ("^[\t ]*\n",	# match an empty line
-			 "^[\t ]*#",		# match a comment
-			 "^[A-z_]",		# match a command
-			 "^[\t ]+[A-z_]", # match a check
-			 )
-matchacts = (lambda(l): None,
-			 do_comment,
-			 do_command,
-			 do_check,
-			 )
+patmatchact = {"^[\t ]*\n"     : lambda(l): None,	# match an empty line
+			   "^[\t ]*#"      : do_comment,		# match a comment
+			   "^[A-z_]"       : do_command,		# match a command
+			   "^[\t ]+[A-z_]" : do_check,			# match a check
+			   }
 
 def main():
 	global verbose
@@ -91,9 +91,9 @@ def main():
 	verbose = options.silent and -1 or verbose
 
 	for line in sys.stdin:
-		for i in xrange(len(matchpats)): # I really need an orderd dict
-			if re.match(matchpats[i], line):
-				matchacts[i](line)
+		for k, v in patmatchact.items(): # I really need an orderd dict
+			if re.match(k, line):
+				v(line)
 				break
 
 if __name__ == "__main__":

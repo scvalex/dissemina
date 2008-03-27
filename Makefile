@@ -12,9 +12,15 @@ clean:
 distclean: clean
 realclean: clean
 
-test: dissemina dcheck
+test: dissemina
 	pkill dissemina || true
 	./dissemina &
 	cat tests.dcheck | ./dcheck -s | grep FAILED || true
+	pkill dissemina || true
+
+testv: dissemina
+	pkill dissemina || true
+	./dissemina &
+	cat tests.dcheck | ./dcheck -v
 	pkill dissemina || true
 
