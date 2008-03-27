@@ -292,7 +292,6 @@ void check_connections_for_data() {
 				remove_and_free_request(cr);
 			} else {
 				cr->len += nbytes;
-				//logprintf(InfoMsg, "data from %d: ``%s''", fds[i].fd, reqs[i].text);
 				if (!ends_with(cr->text, "\r\n\r\n")) /* a HTTP request ends with \r\n\r\n */
 					continue;
 				if (starts_with(cr->text, "GET")) { // is it HTTP GET?
