@@ -1,0 +1,95 @@
+#!/usr/bin/env python
+
+import sys, re, urllib2, sha, optparse
+
+ignore_checks = True
+data = "" # data received from server
+headers = None # headers received from server
+url = "" # last url requested
+status = 0
+server = "http://localhost:6462/"
+verbose = 0
+
+def errmsg(s):
+	if verbose >= 0:
+		print "#ERR", s
+
+def infomsg(s):
+	if verbose > 0:
+		print "#INFO", s
+
+def do_command_GET(line):
+	global data, headers, status, url
+	url = line.split()[1]
+	infomsg("getting %s from server" % (url))
+	status = "200"
+	try:
+		x = urllib2.urlopen(server + url)
+		data = x.read()
+		headers = x.info()
+	except urllib2.HTTPError, e:
+		status = re.match("[A-z ]*([0-9]*)", e.__str__()).groups()[0]
+
+def do_command(line):
+	global ignore_checks
+	ignore_checks = False
+	com = line.split()[0]
+	if globals().has_key("do_command_" + com):
+		globals()["do_command_"+com](line)
+	else:
+		errmsg("Unknown action: " + line.split()[0])
+		ignore_checks = True
+
+def do_check_status(line):
+	infomsg("checking received status (%s) against expected (%s)" %
+			(line.split()[1], status))
+	if status == line.split()[1]:
+		print "OK"
+	else:
+		print "FAILED"
+
+def do_check_data(line):
+	infomsg("checking data from " + url)
+	try:
+		if sha.new(data).digest() == sha.new(open(url[1:]).read()).digest():
+			print "OK"
+			return
+	except:
+		pass
+	print "FAILED"
+
+def do_check(line):
+	if ignore_checks:
+		return
+	line = line.strip()
+	chk = line.split()[0]
+	if globals().has_key("do_check_" + chk):
+		globals()["do_check_"+chk](line)
+	else:
+		errmsg("Unknown check: " + line.split()[0])
+
+patmatchact = {"^[\t ]*\n"     : lambda(l): None,	# match an empty line
+	 		   "^[\t ]*#"      : lambda(l): None,	# match a comment
+			   "^[A-z_]"       : do_command,		# match a command
+			   "^[\t ]+[A-z_]" : do_check,			# match a check
+			   }
+
+def main():
+	global verbose
+
+	p = optparse.OptionParser(description = "runs checks against a server")
+	p.add_option("--verbose", "-v", action="store_true", help="show warnings")
+	p.add_option("--silent", "-s", action="store_true", help="kill all nonessential output")
+	options, arguments = p.parse_args()
+	verbose = options.verbose and 1 or 0
+	verbose = options.silent and -1 or verbose
+
+	for line in sys.stdin:
+		for k, v in patmatchact.items(): # I really need an orderd dict
+			if re.match(k, line):
+				v(line)
+				break
+
+if __name__ == "__main__":
+	main()
+
