@@ -283,12 +283,9 @@ void check_connections_for_data() {
 					prepend_request(&processingRequests, cr);
 					fill_in_request(cr); /* extract data from request text and fill in the other fields */
 					assign_handler(cr);
-					fds[i].fd = -1; /* The fd won't be checked for reads anymore */
-				} else { /* ignore all other requests */
-					close(fds[i].fd);
-					fds[i].fd = -1;	
-					remove_and_free_request(cr);
-				}
+				} else /* send an error for all other requests */
+					cr->handler = error_handler; /*NOTE putting this here is probably a bad idea */
+				fds[i].fd = -1; /* The fd won't be checked for reads anymore */
 			}
 		}
 }
