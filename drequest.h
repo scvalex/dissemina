@@ -23,23 +23,33 @@ enum RequestState {
 	RequestDone
 };
 
+struct request_struct;
+/* Prototype pattern for RequestHandlers
+ * These are functions that are given a request and act on it. (think
+ * http_handler or error_handler) */
+typedef int (*RequestHandler)(struct request_struct *);
+
 struct request_struct {
-	/* holds the full text of the reuquest; that means both headers and data */
+	/* Holds the full text of the reuquest; that means both headers and data */
 	char text[MAXREQSIZE];
-	/* holds only the URI of the request; this looks like /vah/index.xml */
+	/* Holds only the URI of the request; this looks like /vah/index.xml */
 	char uri[MAXURISIZE];
-	/* the length of the text; should be equal to strlen(text) */
+	/* The length of the text; should be equal to strlen(text) */
 	int len;
-	/* network socket FD */
+	/* Network socket FD */
 	int fd;
-	/* the stream to the local file (if one is needed) */
+	/* The stream to the local file (if one is needed) */
 	FILE *fi;
-	/* current state of the request; SEE the RequestState enum */
+	/* Current state of the request; SEE the RequestState enum */
 	int state;
-	/* the stat strucuture of the uri */
+	/* The stat strucuture of the uri */
 	struct stat s;
-	/* if non-zero, file exists and s is valid */
+	/* If non-zero, file exists and s is valid */
 	int exists;
+	/* Pointer to this Request's handler
+	 * Initially, this is 0 but gets assigned a value by
+	 * assign_handler. */		
+	RequestHandler handler;
 	/* this is a node in a linked list and these are the pointers to the next
 	 * and previous elements */
 	struct request_struct *next, *prev;

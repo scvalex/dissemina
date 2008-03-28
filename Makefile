@@ -12,6 +12,9 @@ clean:
 distclean: clean
 realclean: clean
 
+tags: *.c *.h
+	ctags *.c *.h
+
 test: dissemina
 	pkill dissemina || true
 	./dissemina &

@@ -86,104 +86,6 @@ const char *FileHandle[FileHandleNum][4] = {
 	{".xml", "r", "sending xml document", "application/xml"}
 };
 
-/* Send file r->uri to s */
-int send_page(Request *r) {
-	int i;
-	int len;
-	if (!r->fi) {
-		int fh = 0; /* guess Content-Type from file extension */
-		for (i = 1; i < FileHandleNum; ++i)
-			if (ends_with(r->uri, FileHandle[i][0])) {
-				fh = i;
-				break;
-			}
-	
-		r->fi = fopen(r->uri, FileHandle[fh][1]);
-		logprintf(InfoMsg, "%s to %d", FileHandle[fh][2], r->fd);
-
-		char header[256];
-		sprintf(header , "HTTP/1.1 200 OK\r\n"
-						 "Connection: close\r\n"
-						 "Content-Type: %s\r\n"
-						 "Server: Dissemina/0.0.1\r\n"
-						 "\r\n", FileHandle[fh][3]);
-		len = strlen(header);
-		sendall(r->fd, header, len);
-	}
-
-	char buf[SENDBUFSIZE + 2];
-	memset(buf, 0, sizeof(buf));
-	if (!feof(r->fi) && !ferror(r->fi)) {
-		len = fread(buf, 1, 1024, r->fi);
-		/* logprintf(InfoMsg, "sending %d bytes to %d", len, r->fd); */
-		sendall(r->fd, buf, len);
-	}
-	
-	if (feof(r->fi) || ferror(r->fi) || (len < 1024)) {
-		fclose(r->fi);
-		return DONE;
-	}
-
-	return NOTDONE;
-}
-
-/* send a list of the files in specified directory */
-int send_directory_listing(Request *r) {
-	DIR *dp;
-	struct dirent *ep;
-
-	char buf[4096];
-	sprintf(buf , "HTTP/1.1 200 OK\r\n"
-			   	  "Connection: close\r\n"
-				  "Content-Type: text/html\r\n"
-				  "Server: Dissemina/0.0.1\r\n"
-				  "\r\n");
-	sendall(r->fd, buf, strlen(buf));
-
-	dp = opendir(r->uri);
-	char buf2[1024];
-	char buf3[1024];
-	if (dp != NULL) {
-		sprintf(buf, "<html>\n"
-						"<head>\n"
-						"	<title>%s</title>\n"
-						"</head>\n"
-						"<body>\n"
-						"	<table>\n", r->uri);
-		while ((ep = readdir(dp))) {
-			sprintf(buf3, "%s%s", r->uri + 1, ep->d_name);
-			sprintf(buf2, "		<tr><td><a href=\"%s\">%s</a></td></tr>\n", buf3, ep->d_name);
-			strcat(buf, buf2);;
-		}
-		strcat(buf, "	</table>\n"
-					"</body>\n"
-					"</html>\n");
-		sendall(r->fd, buf, strlen(buf));
-		closedir(dp);
-	} else {
-		sprintf(buf, "<html><body>Can't list\n</body></html>");
-		sendall(r->fd, buf, strlen(buf));
-		return NOTDONE;
-	}
-
-	return DONE;
-}
-
-/* Send 404 Not Found to s */
-int send404(Request *r) {
-	logprintf(InfoMsg, "sending 404 Not Found");
-
-	char text404[] = "HTTP/1.1 404 Not Found\r\n"
-					 "Connection: close\r\n"
-					 "Content-Type: text/plain\r\n"
-					 "Server: Dissemina/0.0.1\r\n"
-					 "\r\n"
-					 "Not Found\n";
-	sendall(r->fd, text404, strlen(text404));
-
-	return DONE;
-}
-
 /* check listener for new connections and write them into fds and requests  */
 void get_new_connections() {
 	if (fds[0].revents & POLLRDNORM) {
@@ -230,17 +132,131 @@ void fill_in_request(Request *r) {
 	r->state = ProcessingRequest; /* Mark the request for processing */
 
 	r->exists = (stat(r->uri, &r->s) == 0); /* is the file valid, a directory, etc... */
-	/* if a directory is requested, first dissemina attempts to find an
-	 * index.xml and failing that send the directory listing */
-	if (S_ISDIR(r->s.st_mode)) {
-		Request aux = *r; /* create a new request that correspondes to the index.xml in this directory*/
-		strcat(aux.uri, "/index.xml"); /* if a directory, you will send out the index.xml file */
-		aux.exists = (stat(aux.uri, &aux.s) == 0);
-		if (aux.exists) /* if the file exists */
-			*r = aux; /* replace the current request with the new one */
-		else if (r->uri[strlen(r->uri) - 1] != '/') /* there's no index.xml, so append a / to the dir */
-			strcat(r->uri, "/");                    /* name so that it's clearly a directory */
+}
+
+/* Send 404 Not Found to s */
+int error_handler(Request *r) {
+	logprintf(InfoMsg, "sending 404 Not Found");
+
+	char text404[] = "HTTP/1.1 404 Not Found\r\n"
+					 "Connection: close\r\n"
+					 "Content-Type: text/plain\r\n"
+					 "Server: Dissemina/0.0.1\r\n"
+					 "\r\n"
+					 "Not Found\n";
+	sendall(r->fd, text404, strlen(text404));
+
+	return DONE;
+}
+
+/* send a list of the files in specified directory */
+int directory_listing_handler(Request *r) {
+	DIR *dp;
+	struct dirent *ep;
+
+	char buf[4096];
+	sprintf(buf , "HTTP/1.1 200 OK\r\n"
+			   	  "Connection: close\r\n"
+				  "Content-Type: text/html\r\n"
+				  "Server: Dissemina/0.0.1\r\n"
+				  "\r\n");
+	sendall(r->fd, buf, strlen(buf));
+
+	dp = opendir(r->uri);
+	char buf2[1024];
+	char buf3[1024];
+	if (dp != NULL) {
+		sprintf(buf, "<html>\n"
+						"<head>\n"
+						"	<title>%s</title>\n"
+						"</head>\n"
+						"<body>\n"
+						"	<table>\n", r->uri);
+		while ((ep = readdir(dp))) {
+			sprintf(buf3, "%s%s", r->uri + 1, ep->d_name);
+			sprintf(buf2, "		<tr><td><a href=\"%s\">%s</a></td></tr>\n", buf3, ep->d_name);
+			strcat(buf, buf2);;
+		}
+		strcat(buf, "	</table>\n"
+					"</body>\n"
+					"</html>\n");
+		sendall(r->fd, buf, strlen(buf));
+		closedir(dp);
+	} else {
+		sprintf(buf, "<html><body>Can't list\n</body></html>");
+		sendall(r->fd, buf, strlen(buf));
+		return NOTDONE;
 	}
+
+	return DONE;
+}
+
+/* Send file r->uri to s */
+int simple_http_handler(Request *r) {
+	int i;
+	int len;
+	if (!r->fi) {
+		int fh = 0; /* guess Content-Type from file extension */
+		for (i = 1; i < FileHandleNum; ++i)
+			if (ends_with(r->uri, FileHandle[i][0])) {
+				fh = i;
+				break;
+			}
+	
+		r->fi = fopen(r->uri, FileHandle[fh][1]);
+		logprintf(InfoMsg, "%s to %d", FileHandle[fh][2], r->fd);
+
+		char header[256];
+		sprintf(header , "HTTP/1.1 200 OK\r\n"
+						 "Connection: close\r\n"
+						 "Content-Type: %s\r\n"
+						 "Server: Dissemina/0.0.1\r\n"
+						 "\r\n", FileHandle[fh][3]);
+		len = strlen(header);
+		sendall(r->fd, header, len);
+	}
+
+	char buf[SENDBUFSIZE + 2];
+	memset(buf, 0, sizeof(buf));
+	if (!feof(r->fi) && !ferror(r->fi)) {
+		len = fread(buf, 1, 1024, r->fi);
+		/* logprintf(InfoMsg, "sending %d bytes to %d", len, r->fd); */
+		sendall(r->fd, buf, len);
+	}
+	
+	if (feof(r->fi) || ferror(r->fi) || (len < 1024)) {
+		fclose(r->fi);
+		return DONE;
+	}
+
+	return NOTDONE;
+}
+
+/* goes through the list of RequestHandlers and assigns the first one
+ * that matches to the request (specifically to r->handler).
+ * NOTE this function might make other modifications to the Request
+ * (such as changing the URI)
+ * RETURNS 0 is all went well
+ *        -1 if an error handler was selected */
+int assign_handler(Request *r) {
+	if (r->exists && S_ISREG(r->s.st_mode))
+		r->handler = simple_http_handler; /* a normal file was requested so just send it */
+	else if (r->exists && S_ISDIR(r->s.st_mode)) {
+		if (r->uri[strlen(r->uri) - 1] != '/')
+			strcat(r->uri, "/"); /* make sure there's a trailing slash after the dir name */
+		r->handler = directory_listing_handler;
+		/* if a directory is requested, first dissemina attempts to find an
+		 * index.xml in that directory; failing that, it sends the directory listing */
+		Request aux = *r; /* create a new request that correspondes to the index.xml in this directory*/
+		strcat(aux.uri, "/index.xml"); /* modify the uri to point to the index.xml */
+		aux.exists = (stat(aux.uri, &aux.s) == 0); /* does it exist? */
+		if (assign_handler(&aux) == 0) 
+			*r = aux; /* replace the current request with the new one */
+	} else {
+		r->handler = error_handler; /* don't know what to do with this request so send an error */
+		return -1; /* used an error handler */
+	}
+	return 0; /* all's well */
 }
 
 /* reads data from sockets marked by get_new_connections() */
@@ -265,7 +281,8 @@ void check_connections_for_data() {
 				if (starts_with(cr->text, "GET")) { // is it HTTP GET?
 					cr = pop_request(cr);
 					prepend_request(&processingRequests, cr);
-					fill_in_request(cr); /* extract data from request text and fill in the other fields*/
+					fill_in_request(cr); /* extract data from request text and fill in the other fields */
+					assign_handler(cr);
 					fds[i].fd = -1; /* The fd won't be checked for reads anymore */
 				} else { /* ignore all other requests */
 					close(fds[i].fd);
@@ -282,21 +299,15 @@ void process_requests() {
 	for (cr = processingRequests.next; cr; cr = cr->next) {
 		if (cr->state != ProcessingRequest) /* Is the request ready for processing? */
 			continue;
-		if (S_ISDIR(cr->s.st_mode)) {
-			if (send_directory_listing(cr) != DONE)
-				logprintf(ErrMsg, "problem sending directory listing of %s\n", cr->uri);
+		if (cr->handler) {
+			if (cr->handler(cr) == DONE) {
 			close(cr->fd);
 			cr = remove_and_free_request(cr);
-		} else if (!S_ISREG(cr->s.st_mode)) {
-			if (send404(cr) == DONE) {
-				close(cr->fd);
-				cr = remove_and_free_request(cr);
 			}
 		} else {
-			if (send_page(cr) == DONE) {
-				close(cr->fd);
-				cr = remove_and_free_request(cr);
-			}
+			logprintf(ErrMsg, "null handler encountered");
+			close(cr->fd);
+			cr = remove_and_free_request(cr);
 		}
 	}
 }
