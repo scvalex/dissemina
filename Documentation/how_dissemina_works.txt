@@ -25,7 +25,7 @@ make sense to have two things in the same place, they would have been split.
 
 Another idea was to keep blocks of code as short as possible. Ifs, whiles,
 fors and other control structures are generally short. This was sometimes
-achived by moving functionality to procedures, but more often by rewriting the
+achieved by moving functionality to procedures, but more often by rewriting the
 offending block.
 
 3. Main() and the Grand Design
@@ -99,10 +99,10 @@ nothing.
 
 The first significant instruction here is poll(). As mentioned before, it goes
 through the NUM_FDS elements of the fds array, checking each for the events
-specified. At the begining, it just checks listener for normal read events.
+specified. At the beginning, it just checks listener for normal read events.
 
 The last argument to poll() is a timeout. Generally, if a change to any of the
-descriptors doesn't hapen withing timeout milliseconds, poll() simply returns.
+descriptors doesn't happen withing timeout milliseconds, poll() simply returns.
 A negative timeout is equivalent to infinity.
 
 Here the timeout is set on the three lines above poll(). The first one sets
