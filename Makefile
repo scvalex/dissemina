@@ -1,6 +1,6 @@
 all: dcheck dissemina
 
-dissemina: dissemina.c dstdio.h drequest.h
+dissemina: dissemina.c dstdio.h drequest.h dhandlers.h
 	gcc -Wall dissemina.c -o dissemina
 
 dissemina-debug: dissemina.c dstdio.h

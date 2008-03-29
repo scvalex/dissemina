@@ -8,6 +8,7 @@
 
 #include <stdlib.h>
 #include "dstdio.h"
+#include <stdbool.h>
 #include <sys/stat.h>
 
 /* Maximum size, in bytes, or URI */
@@ -27,7 +28,7 @@ struct request_struct;
 /* Prototype pattern for RequestHandlers
  * These are functions that are given a request and act on it. (think
  * http_handler or error_handler) */
-typedef int (*RequestHandler)(struct request_struct *);
+typedef bool (*RequestHandler)(struct request_struct *);
 
 struct request_struct {
 	/* Holds the full text of the reuquest; that means both headers and data */
