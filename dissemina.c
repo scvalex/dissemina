@@ -26,7 +26,6 @@
 #include <sys/types.h>
 
 #include "dstdio.h"
-#include "dnetio.h"
 #include "dstring.h"
 #include "drequest.h"
 #include "dhandlers.h"
