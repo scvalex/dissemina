@@ -4,11 +4,16 @@
  * 
  * also contains assign_handler
  *
- * REQUIRES stdboo.h dirent.h drequest.h
+ * REQUIRES stdbool.h dirent.h drequest.h
  */
 
 /* Number of bytes sent in one go */
 #define SENDBUFSIZE 1024
+
+enum DoneNotDone {
+	NotDone,
+	Done
+};
 
 /* a linked list to hold the matchers */
 typedef bool (*MatcherFunc)(Request*);
@@ -30,7 +35,7 @@ void create_and_prepend_matcher(MatcherList *list, MatcherFunc f) {
 }
 
 /* Send 404 Not Found to s */
-bool error_handler(Request *r) {
+int error_handler(Request *r) {
 	logprintf(InfoMsg, "sending 404 Not Found");
 
 	char text404[] = "HTTP/1.1 404 Not Found\r\n"
@@ -41,11 +46,11 @@ bool error_handler(Request *r) {
 					 "Not Found\n";
 	sendall(r->fd, text404, strlen(text404));
 
-	return true;
+	return Done;
 }
 
 /* send a list of the files in specified directory */
-bool directory_listing_handler(Request *r) {
+int directory_listing_handler(Request *r) {
 	DIR *dp;
 	struct dirent *ep;
 
@@ -55,7 +60,8 @@ bool directory_listing_handler(Request *r) {
 				  "Content-Type: text/html\r\n"
 				  "Server: Dissemina/0.0.1\r\n"
 				  "\r\n");
-	sendall(r->fd, buf, strlen(buf));
+	if (sendall(r->fd, buf, strlen(buf)) == -1)
+		return Done;
 
 	dp = opendir(r->uri);
 	char buf2[1024];
@@ -80,10 +86,9 @@ bool directory_listing_handler(Request *r) {
 	} else {
 		sprintf(buf, "<html><body>Can't list\n</body></html>");
 		sendall(r->fd, buf, strlen(buf));
-		return false;
 	}
 
-	return true;
+	return Done;
 }
 
 int assign_handler(Request*); 
@@ -94,7 +99,7 @@ bool match_directory_listing_handler(Request *r) {
 
 	if (r->uri[strlen(r->uri) - 1] != '/')
 		strcat(r->uri, "/"); /* make sure there's a trailing slash after the dir name */
-	r->handler = directory_listing_handler;
+	r->handle = directory_listing_handler;
 
 	/* maybe there's an index.xml file to send?  */
 	Request aux = *r;
@@ -117,7 +122,7 @@ const char *FileHandle[FileHandleNum][4] = {
 };
 
 /* Send file r->uri to s */
-bool simple_http_handler(Request *r) {
+int simple_http_handler(Request *r) {
 	int i;
 	int len;
 	if (!r->fi) {
@@ -138,23 +143,24 @@ bool simple_http_handler(Request *r) {
 						 "Server: Dissemina/0.0.1\r\n"
 						 "\r\n", FileHandle[fh][3]);
 		len = strlen(header);
-		sendall(r->fd, header, len);
+		if (sendall(r->fd, header, len) == -1)
+			return Done; /* error, so close connection */
 	}
 
 	char buf[SENDBUFSIZE + 2];
 	memset(buf, 0, sizeof(buf));
 	if (!feof(r->fi) && !ferror(r->fi)) {
 		len = fread(buf, 1, 1024, r->fi);
-		/* logprintf(InfoMsg, "sending %d bytes to %d", len, r->fd); */
-		sendall(r->fd, buf, len);
+		if (sendall(r->fd, buf, len) == -1)
+			return Done; /* error, so close connection */
 	}
 	
 	if (feof(r->fi) || ferror(r->fi) || (len < 1024)) {
 		fclose(r->fi);
-		return true;
+		return Done;
 	}
 
-	return false;
+	return NotDone;
 }
 
 /* match is succesful if uri is a plain file */
@@ -162,7 +168,7 @@ bool match_simple_http_handler(Request *r) {
 	if (!r->exists || !S_ISREG(r->s.st_mode))
 		return false; /* not interested */
 
-	r->handler = simple_http_handler;
+	r->handle = simple_http_handler;
 	return true;
 }
 
@@ -182,7 +188,7 @@ assign_handler(Request *r) {
 		if (m->matches(r))
 			return 0;
 	
-	r->handler = error_handler; /* don't know what to do with this request so send an error */
+	r->handle = error_handler; /* don't know what to do with this request so send an error */
 	return -1;
 }
 

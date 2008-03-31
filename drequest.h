@@ -2,7 +2,7 @@
  * drequest.h
  * 		implementation of Request and RequestList
  *
- * REQUIRES stdlib.h stdboo.h sys/stat.h dstdio.h
+ * REQUIRES stdlib.h stdbool.h sys/stat.h dstdio.h
  */
 
 /* Maximum size, in bytes, or URI */
@@ -22,7 +22,7 @@ struct request_s;
 /* Prototype pattern for RequestHandlers
  * These are functions that are given a request and act on it. (think
  * http_handler or error_handler) */
-typedef bool (*RequestHandler)(struct request_s *);
+typedef int (*RequestHandler)(struct request_s *);
 
 typedef struct request_s {
 	/* Holds the full text of the reuquest; that means both headers and data */
@@ -40,11 +40,11 @@ typedef struct request_s {
 	/* The stat strucuture of the uri */
 	struct stat s;
 	/* If non-zero, file exists and s is valid */
-	int exists;
+	bool exists;
 	/* Pointer to this Request's handler
 	 * Initially, this is 0 but gets assigned a value by
 	 * assign_handler. */		
-	RequestHandler handler;
+	RequestHandler handle;
 	/* this is a node in a linked list and these are the pointers to the next
 	 * and previous elements */
 	struct request_s *next, *prev;
