@@ -3,15 +3,9 @@
  *   base handlers and their associated match functions
  * 
  * also contains assign_handler
+ *
+ * REQUIRES stdboo.h dirent.h drequest.h
  */
-
-#ifndef DHANDLERS_H
-#define DHANDLERS_H
-
-#include <stdbool.h>
-#include <dirent.h>
-
-#include "drequest.h"
 
 /* Number of bytes sent in one go */
 #define SENDBUFSIZE 1024
@@ -191,6 +185,4 @@ assign_handler(Request *r) {
 	r->handler = error_handler; /* don't know what to do with this request so send an error */
 	return -1;
 }
-
-#endif
 

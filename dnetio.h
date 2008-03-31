@@ -1,13 +1,9 @@
 /*
  * dnetio.h
  * 		wrapper functions around send and recv
+ *
+ * REQUIRES unistd.h sys/socket.h
  */
-
-#ifndef DNETIO_H
-#define DNETIO_H
-
-#include <unistd.h>
-#include <sys/socket.h>
 
 /* Send all data in buf to s */
 int sendall(int s, char *buf, int len) {
@@ -39,6 +35,4 @@ int sendall(int s, char *buf, int len) {
  * closed. Dcheck.c, on the other hand, waits for the other end (i.e. the
  * server) to close the connection.
  */
-
-#endif
 

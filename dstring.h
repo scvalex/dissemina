@@ -1,12 +1,9 @@
 /*
  * dstring.h
  * 		convenience string manipulation functions
+ *
+ * REQUIRES string.h
  */
-
-#ifndef DSTRING_H
-#define DSTRING_H
-
-#include <string.h>
 
 /* Returns 1 if s starts with w */
 int starts_with(char *s, char *w) {
@@ -31,6 +28,4 @@ int ends_with(const char *s, const char *w) {
 
 	return (j < 0);
 }
-
-#endif
 

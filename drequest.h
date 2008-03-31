@@ -1,15 +1,9 @@
 /*
  * drequest.h
  * 		implementation of Request and RequestList
+ *
+ * REQUIRES stdlib.h stdboo.h sys/stat.h dstdio.h
  */
-
-#ifndef DREQUEST_H
-#define DREQUEST_H
-
-#include <stdlib.h>
-#include "dstdio.h"
-#include <stdbool.h>
-#include <sys/stat.h>
 
 /* Maximum size, in bytes, or URI */
 #define MAXURISIZE 1024
@@ -102,6 +96,4 @@ void display_requests(RequestList *list, int state) {
 			logprintf(InfoMsg, "%d", cr->fd);
 	logprintf(InfoMsg, "---");
 }
-
-#endif
 

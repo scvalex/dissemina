@@ -1,14 +1,9 @@
 /*
  * dstdio.h
  *		standard input and output used by dissemina programmes
+ *
+ * REQUIRES time.h stdio.h stdarg.h
  */
-
-#ifndef DSTDIO_H
-#define DSTDIO_H
-
-#include <time.h>
-#include <stdio.h>
-#include <stdarg.h>
 
 /* This variable controls what's printed and what's not. 
  * It MUST be declared in every binary to avoid linker errors. */
@@ -40,6 +35,4 @@ void logprintf(int cat, char *fmt, ...) {
 	vfprintf(stderr, fmt, ap);
 	fprintf(stderr, "\n");
 }
-
-#endif
 

@@ -9,19 +9,27 @@
 #define DEBUG 0
 #define _XOPEN_SOURCE 1 /* Needed for POLLRDNORM... */
 
+#include <arpa/inet.h>
+#include <ctype.h>
+#include <dirent.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include "dstdio.h"
 #include "dnetio.h"
 #include "dstring.h"
 #include "drequest.h"
 #include "dhandlers.h"
-#include <stdlib.h>
-#include <ctype.h>
-#include <poll.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 
 /* Maximum number of open network connections */
 #define NUM_FDS 1024
