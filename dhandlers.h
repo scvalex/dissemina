@@ -35,8 +35,6 @@ void create_and_prepend_matcher(MatcherList *list, MatcherFunc f) {
 	list->next = r;
 }
 
-int assign_handler(Request*); 
-
 /* Send 404 Not Found to s */
 bool error_handler(Request *r) {
 	logprintf(InfoMsg, "sending 404 Not Found");
@@ -94,24 +92,25 @@ bool directory_listing_handler(Request *r) {
 	return true;
 }
 
-/* matches the directory listing handler
- * match is succesful if URI is a directory */
+int assign_handler(Request*); 
+/* match is succesful if URI is a directory */
 bool match_directory_listing_handler(Request *r) {
-	if (r->exists && S_ISDIR(r->s.st_mode)) {
-		if (r->uri[strlen(r->uri) - 1] != '/')
-			strcat(r->uri, "/"); /* make sure there's a trailing slash after the dir name */
-		r->handler = directory_listing_handler;
-		/* if a directory is requested, first dissemina attempts to find an
-		 * index.xml in that directory; failing that, it sends the directory listing */
-		Request aux = *r; /* create a new request that correspondes to the index.xml in this directory*/
-		strcat(aux.uri, "/index.xml"); /* modify the uri to point to the index.xml */
-		aux.exists = (stat(aux.uri, &aux.s) == 0); /* does it exist? */
-		logprintf(InfoMsg, "trying handler of index.xml");
-		if (assign_handler(&aux) == 0) 
-			*r = aux; /* replace the current request with the new one */
-		return true;
-	}
-	return false;
+	if (!r->exists || !S_ISDIR(r->s.st_mode))
+		return false;
+
+	if (r->uri[strlen(r->uri) - 1] != '/')
+		strcat(r->uri, "/"); /* make sure there's a trailing slash after the dir name */
+	r->handler = directory_listing_handler;
+
+	/* maybe there's an index.xml file to send?  */
+	Request aux = *r;
+	strcat(aux.uri, "/index.xml"); 
+	aux.exists = (stat(aux.uri, &aux.s) == 0);
+	logprintf(InfoMsg, "trying handler of index.xml");
+	if (assign_handler(&aux) == 0) 
+		*r = aux; /* replace the current request with the new one */
+
+	return true;
 }
 
 #define FileHandleNum 5
@@ -164,14 +163,13 @@ bool simple_http_handler(Request *r) {
 	return false;
 }
 
-/* matches a http file request
- * match is succesful if uri is a plain file */
+/* match is succesful if uri is a plain file */
 bool match_simple_http_handler(Request *r) {
-	if (r->exists && S_ISREG(r->s.st_mode)) {
-		r->handler = simple_http_handler;
-		return true; /* a normal file was requested so just send it */
-	}
-	return false;
+	if (!r->exists || !S_ISREG(r->s.st_mode))
+		return false; /* not interested */
+
+	r->handler = simple_http_handler;
+	return true;
 }
 
 /* set up the basic matchers */
@@ -180,13 +178,11 @@ void init_matchers() {
 	create_and_prepend_matcher(&matchers, match_simple_http_handler);
 }
 
-/* goes through the list of RequestHandlers and assigns the first one
- * that matches to the request (specifically to r->handler).
- * NOTE this function might make other modifications to the Request
+/* NOTE this function might make other modifications to the Request
  * (such as changing the URI)
- * RETURNS 0 is all went well
- *        -1 if an error handler was selected */
-int assign_handler(Request *r) {
+ */
+int /* 0 on success; -1 on error */
+assign_handler(Request *r) {
 	Matcher *m;
 	for (m = matchers.next; m; m = m->next)
 		if (m->matches(r))
