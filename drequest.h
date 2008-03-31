@@ -24,13 +24,13 @@ enum RequestState {
 	RequestDone
 };
 
-struct request_struct;
+struct request_s;
 /* Prototype pattern for RequestHandlers
  * These are functions that are given a request and act on it. (think
  * http_handler or error_handler) */
-typedef bool (*RequestHandler)(struct request_struct *);
+typedef bool (*RequestHandler)(struct request_s *);
 
-struct request_struct {
+typedef struct request_s {
 	/* Holds the full text of the reuquest; that means both headers and data */
 	char text[MAXREQSIZE];
 	/* Holds only the URI of the request; this looks like /vah/index.xml */
@@ -53,9 +53,8 @@ struct request_struct {
 	RequestHandler handler;
 	/* this is a node in a linked list and these are the pointers to the next
 	 * and previous elements */
-	struct request_struct *next, *prev;
-};
-typedef struct request_struct Request;
+	struct request_s *next, *prev;
+} Request;
 typedef Request RequestList;
 
 /* Prepend a request to the specified list */

@@ -29,6 +29,8 @@
 /* On which port shall I listen? */
 const int LOCAL_PORT = 6462;
 
+int PrintableMsgs = ErrMsg; /* SEE dstdio.h */
+
 int listener; /* fd for listener socket */
 struct pollfd fds[NUM_FDS];
 Request *fdToRequest[NUM_FDS]; /* maps fds[idx] to Requests in readingRequests */
@@ -36,12 +38,13 @@ Request *fdToRequest[NUM_FDS]; /* maps fds[idx] to Requests in readingRequests *
 /* This is the global list of requests.
  * It's actually a linked list of requests with the first node as a sentinel
  * (i.e the first node is a Request object, but it's not used) */
-RequestList processingRequests;
+RequestList processingRequests;		/* see drequest.h */
 
-/* The list of requests that are currentrly beeing read into. */
-RequestList readingRequests;
+/* The list of requests that are currentrly being read into. */
+RequestList readingRequests;		/* see drequest.h */
 
-int PrintableMsgs = ErrMsg; /* SEE dstdio.h */
+/* The list of mathers used to assing handlers to requests */
+MatcherList matchers;		/* see dhandlers.h */
 
 /* Display an error and quit */
 void quit_err(const char *s) {
@@ -50,7 +53,9 @@ void quit_err(const char *s) {
 }
 
 /* Create the listener and return it */
-void setup_listener() {
+int setup_listener() {
+	int listener;
+
 	if ((listener = socket(PF_INET, SOCK_STREAM, 0)) == -1)
 		quit_err("socket");
 
@@ -69,6 +74,8 @@ void setup_listener() {
 	if (listen(listener, 10) == -1)
 		quit_err("listen");
 	logprintf(MustPrintMsg, "listening on port %d", LOCAL_PORT);
+
+	return listener;
 }
 
 /* check listener for new connections and write them into fds and requests  */
@@ -141,10 +148,10 @@ void check_connections_for_data() {
 				if (starts_with(cr->text, "GET")) { // is it HTTP GET?
 					cr = pop_request(cr);
 					prepend_request(&processingRequests, cr);
-					fill_in_request(cr); /* extract data from request text and fill in the other fields */
+					fill_in_request(cr);
 					assign_handler(cr);
 				} else /* send an error for all other requests */
-					cr->handler = error_handler; /*NOTE putting this here is probably a bad idea */
+					cr->handler = error_handler; /* NOTE putting this here is probably a bad idea */
 				fds[i].fd = -1; /* The fd won't be checked for reads anymore */
 			}
 		}
@@ -158,8 +165,8 @@ void process_requests() {
 			continue;
 		if (cr->handler) {
 			if (cr->handler(cr)) {
-			close(cr->fd);
-			cr = remove_and_free_request(cr);
+				close(cr->fd);
+				cr = remove_and_free_request(cr);
 			}
 		} else {
 			logprintf(ErrMsg, "null handler encountered");
@@ -170,7 +177,8 @@ void process_requests() {
 }
 
 int main(int argc, char *argv[]) {
-	setup_listener();
+	listener = setup_listener();		/* see dnetio.h */
+	init_matchers();					/* see dhandlers.h */
 
 	int i;
 	for (i = 0; i < NUM_FDS; ++i)
@@ -180,7 +188,7 @@ int main(int argc, char *argv[]) {
 	fds[0].events = POLLRDNORM;
 	int timeout;
 	for (;;) {
-		timeout = -1; /* a negative timeout means poll forever */
+		timeout = -1; 
 		if (processingRequests.next)
 			timeout = 0; /* if there's a reqeust ready, timeout immediately */
 		if (poll(fds, NUM_FDS, timeout) == -1)

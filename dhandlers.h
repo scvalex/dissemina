@@ -8,12 +8,34 @@
 #ifndef DHANDLERS_H
 #define DHANDLERS_H
 
-#include "drequest.h"
 #include <stdbool.h>
 #include <dirent.h>
 
+#include "drequest.h"
+
 /* Number of bytes sent in one go */
 #define SENDBUFSIZE 1024
+
+/* a linked list to hold the matchers */
+typedef bool (*MatcherFunc)(Request*);
+typedef struct matcher_t {
+	MatcherFunc matches;
+	RequestHandler handler;
+	struct matcher_t *next;
+} Matcher;
+typedef Matcher MatcherList;
+
+extern MatcherList matchers;
+
+/* Prepend a matcher to the specified list */
+void create_and_prepend_matcher(MatcherList *list, MatcherFunc f, RequestHandler h) {
+	Matcher *r = malloc(sizeof(Matcher));
+	memset(r, 0, sizeof(Matcher));
+	r->matches = f;
+	r->handler = h;
+	r->next = list->next;
+	list->next = r;
+}
 
 int assign_handler(Request*); 
 
@@ -29,13 +51,6 @@ bool error_handler(Request *r) {
 					 "Not Found\n";
 	sendall(r->fd, text404, strlen(text404));
 
-	return true;
-}
-
-/* attempts to match error_handler;
- * will ALWAYS match */
-bool match_error_handler(Request *r) {
-	r->handler = error_handler; /* don't know what to do with this request so send an error */
 	return true;
 }
 
@@ -93,6 +108,7 @@ bool match_directory_listing_handler(Request *r) {
 		Request aux = *r; /* create a new request that correspondes to the index.xml in this directory*/
 		strcat(aux.uri, "/index.xml"); /* modify the uri to point to the index.xml */
 		aux.exists = (stat(aux.uri, &aux.s) == 0); /* does it exist? */
+		logprintf(InfoMsg, "trying handler of index.xml");
 		if (assign_handler(&aux) == 0) 
 			*r = aux; /* replace the current request with the new one */
 		return true;
@@ -160,6 +176,12 @@ bool match_simple_http_handler(Request *r) {
 	return false;
 }
 
+/* set up the basic matchers */
+void init_matchers() {
+	create_and_prepend_matcher(&matchers, match_directory_listing_handler, directory_listing_handler);
+	create_and_prepend_matcher(&matchers, match_simple_http_handler, simple_http_handler);
+}
+
 /* goes through the list of RequestHandlers and assigns the first one
  * that matches to the request (specifically to r->handler).
  * NOTE this function might make other modifications to the Request
@@ -167,14 +189,13 @@ bool match_simple_http_handler(Request *r) {
  * RETURNS 0 is all went well
  *        -1 if an error handler was selected */
 int assign_handler(Request *r) {
-	if (!match_simple_http_handler(r))
-		if (!match_directory_listing_handler(r)) {
-			if (!match_error_handler(r))
-				logprintf(ErrMsg, "something impossible has just happened in the match chain");
-			else
-				return -1; /* used an error handler */
-		}
-	return 0; /* all's well */
+	Matcher *m;
+	for (m = matchers.next; m; m = m->next)
+		if (m->matches(r))
+			return 0;
+	
+	r->handler = error_handler; /* don't know what to do with this request so send an error */
+	return -1;
 }
 
 #endif
