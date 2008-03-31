@@ -20,7 +20,6 @@
 typedef bool (*MatcherFunc)(Request*);
 typedef struct matcher_t {
 	MatcherFunc matches;
-	RequestHandler handler;
 	struct matcher_t *next;
 } Matcher;
 typedef Matcher MatcherList;
@@ -28,11 +27,10 @@ typedef Matcher MatcherList;
 extern MatcherList matchers;
 
 /* Prepend a matcher to the specified list */
-void create_and_prepend_matcher(MatcherList *list, MatcherFunc f, RequestHandler h) {
+void create_and_prepend_matcher(MatcherList *list, MatcherFunc f) {
 	Matcher *r = malloc(sizeof(Matcher));
 	memset(r, 0, sizeof(Matcher));
 	r->matches = f;
-	r->handler = h;
 	r->next = list->next;
 	list->next = r;
 }
@@ -178,8 +176,8 @@ bool match_simple_http_handler(Request *r) {
 
 /* set up the basic matchers */
 void init_matchers() {
-	create_and_prepend_matcher(&matchers, match_directory_listing_handler, directory_listing_handler);
-	create_and_prepend_matcher(&matchers, match_simple_http_handler, simple_http_handler);
+	create_and_prepend_matcher(&matchers, match_directory_listing_handler);
+	create_and_prepend_matcher(&matchers, match_simple_http_handler);
 }
 
 /* goes through the list of RequestHandlers and assigns the first one
