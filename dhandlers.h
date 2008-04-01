@@ -2,8 +2,6 @@
  * dhandler.h
  *   base handlers and their associated match functions
  * 
- * also contains assign_handler
- *
  * REQUIRES stdbool.h dirent.h drequest.h
  */
 

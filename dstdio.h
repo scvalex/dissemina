@@ -1,7 +1,7 @@
 /*
  * dstdio.h
  *		standard input and output used by dissemina programmes
- *
+ *  
  * REQUIRES unistd.h sys/socket.h time.h stdio.h stdarg.h
  */
 

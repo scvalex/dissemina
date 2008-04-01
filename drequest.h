@@ -1,7 +1,7 @@
 /*
  * drequest.h
  * 		implementation of Request and RequestList
- *
+ * 		
  * REQUIRES stdlib.h stdbool.h sys/stat.h dstdio.h
  */
 

@@ -2,7 +2,7 @@
  * dissemina.c 
  * 		very fast webserver
  *
- * listens for GET requests on port 6462 and carries them out
+ * listens for GETs on port 6462
  */
 
 /* Set DEBUG to 1 to kill all output */
