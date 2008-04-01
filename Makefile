@@ -1,19 +1,38 @@
+CFLAGS = -g -O2 -Wall
+LDFLAGS = 
+
+CC = gcc
+RM = rm -f
+FIND = find
+
+QUIET_CC = @echo '    ' CC $@;
+QUIET_LINK = @echo '    ' LINK $@;
+
 all: dcheck dissemina
 
-dissemina: dissemina.c dstdio.h drequest.h dhandlers.h
-	gcc -Wall dissemina.c -o dissemina
+dissemina: dissemina.o
+	$(QUIET_LINK)$(CC) $(LDFLAGS) dissemina.o -o dissemina
 
-dissemina-debug: dissemina.c dstdio.h
-	gcc -Wall -g dissemina.c -o dissemina
+dissemina.o: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h 
+	$(QUIET_CC)$(CC) -o dissemina.o -c $(CFLAGS) dissemina.c
+
+configure: configure.ac
+	autoconf
 
 clean:
-	rm dissemina
+	$(RM) dissemina
+	$(RM) *.o
+	$(RM) -r autom4te.cache config.log configure
 
 distclean: clean
 realclean: clean
 
-tags: *.c *.h
-	ctags *.c *.h
+%.o: %.c
+	$(QUIET_CC)$(CC) -o $*.o -c $(CFLAGS) $<
+
+tags:
+	$(RM) tags
+	$(FIND) . -name '*.[hc]' -print | xargs etags -a
 
 test: dissemina
 	pkill dissemina || true

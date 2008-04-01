@@ -124,7 +124,7 @@ const char *FileHandle[FileHandleNum][4] = {
 /* Send file r->uri to s */
 int simple_http_handler(Request *r) {
 	int i;
-	int len;
+	int len = 0;
 	if (!r->fi) {
 		int fh = 0; /* guess Content-Type from file extension */
 		for (i = 1; i < FileHandleNum; ++i)
