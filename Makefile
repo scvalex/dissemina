@@ -18,13 +18,6 @@ dissemina: dissemina.o
 dissemina.o: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h 
 	$(QUIET_CC)$(CC) -o dissemina.o -c $(CFLAGS) -DVERSION=\"$(VERSION)\" dissemina.c
 					
-configure: configure.ac
-	$(QUIET_GEN)$(RM) $@ $<+ && \
-	sed -e 's/@@VERSION@@/$(VERSION)/g' \
-		$< > $<+ &&\
-	autoconf -o $@ $<+ && \
-	$(RM) $<+
-
 %.o: %.c
 	$(QUIET_CC)$(CC) -o $*.o -c $(CFLAGS) $<
 
@@ -35,7 +28,6 @@ tags:
 clean:
 	$(RM) dissemina
 	$(RM) *.o
-	$(RM) -r autom4te.cache config.log configure
 
 distclean: clean
 realclean: clean
