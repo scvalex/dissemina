@@ -1,5 +1,4 @@
 CFLAGS = -g -O2 -Wall
-LDFLAGS = 
 VERSION = 0.0.1
 
 CC = gcc
@@ -12,12 +11,9 @@ QUIET_GEN = @echo '    ' GEN $@;
 
 all: dcheck dissemina
 
-dissemina: dissemina.o
-	$(QUIET_LINK)$(CC) $(LDFLAGS) dissemina.o -o dissemina
+dissemina: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h
+	$(QUIET_CC)$(CC) -o dissemina $(CFLAGS) -DVERSION=\"$(VERSION)\" dissemina.c
 
-dissemina.o: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h 
-	$(QUIET_CC)$(CC) -o dissemina.o -c $(CFLAGS) -DVERSION=\"$(VERSION)\" dissemina.c
-					
 %.o: %.c
 	$(QUIET_CC)$(CC) -o $*.o -c $(CFLAGS) $<
 
