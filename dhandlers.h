@@ -8,7 +8,10 @@
  */
 
 /* Number of bytes sent in one go */
+
 #define SENDBUFSIZE 1024
+
+extern const char dissemina_version_string[];
 
 enum DoneNotDone {
 	NotDone,
@@ -38,12 +41,13 @@ void create_and_prepend_matcher(MatcherList *list, MatcherFunc f) {
 int error_handler(Request *r) {
 	logprintf(InfoMsg, "sending 404 Not Found");
 
-	char text404[] = "HTTP/1.1 404 Not Found\r\n"
+	char text404[1024];
+	sprintf(text404, "HTTP/1.1 404 Not Found\r\n"
 					 "Connection: close\r\n"
 					 "Content-Type: text/plain\r\n"
-					 "Server: Dissemina/0.0.1\r\n"
+					 "Server: Dissemina/%s\r\n"
 					 "\r\n"
-					 "Not Found\n";
+					 "Not Found\n", dissemina_version_string);
 	sendall(r->fd, text404, strlen(text404));
 
 	return Done;
@@ -58,8 +62,8 @@ int directory_listing_handler(Request *r) {
 	sprintf(buf , "HTTP/1.1 200 OK\r\n"
 			   	  "Connection: close\r\n"
 				  "Content-Type: text/html\r\n"
-				  "Server: Dissemina/0.0.1\r\n"
-				  "\r\n");
+				  "Server: Dissemina/%s\r\n"
+				  "\r\n", dissemina_version_string);
 	if (sendall(r->fd, buf, strlen(buf)) == -1)
 		return Done;
 
@@ -140,8 +144,8 @@ int simple_http_handler(Request *r) {
 		sprintf(header , "HTTP/1.1 200 OK\r\n"
 						 "Connection: close\r\n"
 						 "Content-Type: %s\r\n"
-						 "Server: Dissemina/0.0.1\r\n"
-						 "\r\n", FileHandle[fh][3]);
+						 "Server: Dissemina/%s\r\n"
+						 "\r\n", FileHandle[fh][3], dissemina_version_string);
 		len = strlen(header);
 		if (sendall(r->fd, header, len) == -1)
 			return Done; /* error, so close connection */

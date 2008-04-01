@@ -38,6 +38,8 @@ const int LOCAL_PORT = 6462;
 
 int PrintableMsgs = ErrMsg; /* SEE dstdio.h */
 
+const char dissemina_version_string[] = VERSION;
+
 int listener; /* fd for listener socket */
 struct pollfd fds[NUM_FDS];
 Request *fdToRequest[NUM_FDS]; /* maps fds[idx] to Requests in readingRequests */
