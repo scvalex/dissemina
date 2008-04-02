@@ -8,7 +8,7 @@ This document describes the general principles on which dissemina works. It
 gives a brief overview of the call graph and explains what the data structures
 represent and how they are used.
 
-This document deals with v0.0.1. It may become slightly outdated as new
+This document deals with v0.0.2. It may become slightly outdated as new
 versions come out.
 
 2. Design Principles
@@ -35,7 +35,8 @@ For ease of reading, main() is reproduced here
 
 source--------------------------------------------
 int main(int argc, char *argv[]) {
-	setup_listener();
+	listener = setup_listener();		
+	init_matchers();				
 
 	int i;
 	for (i = 0; i < NUM_FDS; ++i)
@@ -45,8 +46,8 @@ int main(int argc, char *argv[]) {
 	fds[0].events = POLLRDNORM;
 	int timeout;
 	for (;;) {
-		timeout = -1; /* a negative timeout means poll forever */
-		if (requests.next)
+		timeout = -1; 
+		if (processingRequests.next)
 			timeout = 0; /* if there's a reqeust ready, timeout immediately */
 		if (poll(fds, NUM_FDS, timeout) == -1)
 			quit_err("poll");
@@ -122,13 +123,14 @@ the case, the data is read into the corresponding Request object. The request
 may not be read in a single go, so this function may write to a Request
 several times. If the request is completed (i.e. it ends with CR LF CR LF),
 the descriptor in fds is set to -1 so that further reads will not be possible,
-several fields in Request are filled in and it is marked as ready for
-processing (i.e. the next function will work on it).
+several fields in Request are filled in and it is moved into the list
+for processing (i.e. the next function will work on it). Also, a
+handler is assigned to the request.
 
 The final function in main() is process_requests(). This is where the data is
-actually sent. It goes through the list of Requests and works only on the ones
-marked as ready for processing. It decides on what to send back (the file or
-an error page) and sends it in chunks of SENDBUFSIZE (default is 1K).
+actually sent. It goes through the list of Requests that are ready for
+for processing. It decides on what to send back (throuh the use of
+handlers) and sends it in chunks of SENDBUFSIZE (default is 1K).
 
 That's it for main(). The next sections deal with the three functions
 previously mentioned.

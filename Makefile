@@ -1,5 +1,5 @@
 CFLAGS = -g -O2 -Wall
-VERSION = 0.0.1
+VERSION = 0.0.2
 
 CC = gcc
 RM = rm -f
