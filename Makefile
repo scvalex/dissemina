@@ -1,3 +1,5 @@
+DRC_GENERATED_FILES = $(patsubst Resources/%.in,%,$(wildcard Resources/*.in))
+
 CFLAGS = -g -O2 -Wall
 VERSION = 0.0.2
 
@@ -12,8 +14,14 @@ HIDE = @echo;
 
 all: dcheck dissemina
 
-dissemina: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h
-	$(QUIET_CC)$(CC) -o dissemina $(CFLAGS) -DVERSION=\"$(VERSION)\" dissemina.c
+dissemina: dissemina.o pagetempl.o
+	$(QUIET_LINK)$(CC) $< -o $@
+
+dissemina.o: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h
+	$(QUIET_CC)$(CC) -c $(CFLAGS) -DVERSION=\"$(VERSION)\" dissemina.c -o $@
+
+pagetempl.c: Resources/pagetempl.c.in
+	$(QUIET_GEN)./drc $< > $@
 
 %.o: %.c
 	$(QUIET_CC)$(CC) -o $*.o -c $(CFLAGS) $<
@@ -38,6 +46,7 @@ FILES: *.[ch]
 clean:
 	$(RM) dissemina
 	$(RM) *.o
+	$(RM) $(DRC_GENERATED_FILES)
 
 distclean: clean
 realclean: clean

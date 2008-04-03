@@ -1,0 +1,11 @@
+/*
+ * pagetempl.c.in
+ * 		templates for generated html pages
+ */
+
+char template_pagehead[] = @@./pagehead.xml@@;
+
+char template_bodystart[] = @@./pagebodystart.xml@@;
+
+char template_bodyend[] = @@./pagebodyend.xml@@;
+

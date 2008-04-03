@@ -1,0 +1,49 @@
+#!/bin/env perl
+
+use strict;
+use warnings;
+
+#
+# drc - Dissemina Resource Compiler
+#
+# reads a file from stdin and outputs the reformatted version
+#
+
+my $ARGC = $#ARGV + 1;
+if ($ARGC < 1) {
+	print STDERR "I take one argument";
+	exit(1);
+}
+
+my $workfn = $ARGV[0];
+if (not -f $workfn) {
+	print STDERR "File must be a plain text file";
+	exit(1);
+}
+
+open(WORKF, $workfn);
+
+my $workdir = substr($workfn, 0, rindex($workfn, "/") + 1);
+
+my $line;
+while ($line = <WORKF>) {
+	if ($line =~ /@@([a-zA-Z0-9.\/]*)@@/) {
+		my $cf = $workdir . $1;
+		print substr($line, 0, index($line, "@@"));
+		open(FILE, $cf);
+		my $fline = <FILE>;
+		chomp($fline);
+		$fline =~ s/"/\\"/g;
+		print "\"", $fline, "\"\n";
+		while ($fline = <FILE>) {
+			chomp($fline);
+			$fline =~ s/"/\\"/g;
+			print "\t\"", $fline, "\"\n";
+		}
+		print substr($line, rindex($line, "@@") + 2,
+			length($line)-rindex($line, "@@") - 2);
+	} else {
+		print $line;
+	}
+}
+
