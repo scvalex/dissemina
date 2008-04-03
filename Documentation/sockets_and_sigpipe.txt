@@ -68,10 +68,13 @@ Also, by returning EPIPE, the simple error handling mechanism would work.
 
 As far as I've managed to gather from the net, SIGPIPE is sent when you try to
 send to a receiver, but, in the meantime, something has happened to it and the
-OS know about it.
+application doesn't know about it.
 
 In this case, I'm betting it's because the client would sometimes send a TCP
-reset request and there isn't anything to handle it.
+RST request and there isn't anything to handle it.
+
+It can also happen if the client has simply closed his end of the
+socket.
 
 5. Further thoughts
 -------------------

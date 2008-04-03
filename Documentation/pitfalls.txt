@@ -1,0 +1,63 @@
+Five pitfalls of Linux sockets programming
+==========================================
+
+Yesterday, I found an interesting article about socket programming on
+developerWorks:
+
+	http://www.ibm.com/developerworks/library/l-sockpit/
+
+It enumerates five common mistakes made by programmers when they first
+have to deal with sockets.
+
+Annoyingly, I fell into three of them (and I consider myself a fairly
+good programmer). Even more annoyingly, they're the kind of mistakes
+which are obvious once someone mentions them.
+
+Here they are:
+
+Pitfall 1. Ignoring return status
+---------------------------------
+
+The last time this hit me was when I kept getting SIGPIPE's due to
+attempting to write to a broken socket.
+
+I haven't managed to drop data yet, but there's still time.
+
+Pitfall 2. Peer socket closure
+------------------------------
+
+This is the SIGPIPE problem. See Documentation/sockets_and_sigpipe.txt
+for a complete description.
+
+Pitfall 3. Address in use error (EADDRINUSE)
+--------------------------------------------
+
+Basically, you try to bind a socket to an address and the OS replies
+that it's already in use even though it's not.
+
+I got hit by this early on when trying to write a simple echo server.
+Solution is to set the socket option SO_REUSEADDR.
+
+Pitfall 4. Sending structured data
+----------------------------------
+
+Summary: different machines interpret binary data differently.
+
+This doesn't actually affect a http server as text is text regardless
+of the machine (and UTF is backwards compatible with ASCII so there's
+no problem).
+
+Pitfall 5. Assuming that two sends() are received as two recvs()
+----------------------------------------------------------------
+
+Title sends it all. TCP guarantees that data arrives in order. It
+specifies nothing regarding the size of the chunks received.
+
+HTTP is stream-oriented, so we're not affected.
+
+Conclusion
+----------
+
+This is very useful for someone who's just started using sockets, but
+it's obvious for anyone with a few hours worth of experience.
+
