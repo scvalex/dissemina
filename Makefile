@@ -15,7 +15,7 @@ HIDE = @echo;
 all: dcheck dissemina
 
 dissemina: dissemina.o pagetempl.o
-	$(QUIET_LINK)$(CC) $< -o $@
+	$(QUIET_LINK)$(CC) $^ -o $@
 
 dissemina.o: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h
 	$(QUIET_CC)$(CC) -c $(CFLAGS) -DVERSION=\"$(VERSION)\" dissemina.c -o $@

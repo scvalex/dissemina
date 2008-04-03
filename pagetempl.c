@@ -3,28 +3,27 @@
  * 		templates for generated html pages
  */
 
-char template_pagehead[] = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-	""
-	"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN\""
-	" \"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">"
-	""
-	"<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\">"
-	"    <head>"
-	"        <meta http-equiv=\"Content-Type\" content=\"application/xhtml+xml; charset=utf-8\" />"
-	""
-	"        <meta name=\"generator\" content=\"dissemina\" />"
-	""
-	"        <title>%s</title>"
-	"    </head>"
-	""
+const char template_pagehead[] = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "\n"
+    "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN\"\n"
+    " \"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">\n"
+    "\n"
+    "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\">\n"
+    "    <head>\n"
+    "        <meta http-equiv=\"Content-Type\" content=\"application/xhtml+xml; charset=utf-8\" />\n"
+    "\n"
+    "        <meta name=\"generator\" content=\"dissemina\" />\n"
+    "\n"
+    "        <title>%s</title>\n"
+    "    </head>\n"
 ;
 
-char template_bodystart[] = "	<body>"
-	""
+const char template_bodystart[] = "	<body>\n"
+    "\n"
 ;
 
-char template_bodyend[] = "    </body>"
-	"</html>"
-	""
+const char template_bodyend[] = "    </body>\n"
+    "</html>\n"
+    "\n"
 ;
 

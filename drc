@@ -34,11 +34,11 @@ while ($line = <WORKF>) {
 		my $fline = <FILE>;
 		chomp($fline);
 		$fline =~ s/"/\\"/g;
-		print "\"", $fline, "\"\n";
+		print "\"", $fline, "\\n\"\n";
 		while ($fline = <FILE>) {
 			chomp($fline);
 			$fline =~ s/"/\\"/g;
-			print "\t\"", $fline, "\"\n";
+			print "    \"", $fline, "\\n\"\n";
 		}
 		print substr($line, rindex($line, "@@") + 2,
 			length($line)-rindex($line, "@@") - 2);

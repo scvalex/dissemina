@@ -11,6 +11,10 @@
 
 extern const char dissemina_version_string[];
 
+extern const char template_pagehead[];
+extern const char template_bodystart[];
+extern const char template_bodyend[];
+
 enum DoneNotDone {
 	NotDone,
 	Done
@@ -69,20 +73,16 @@ int directory_listing_handler(Request *r) {
 	char buf2[1024];
 	char buf3[1024];
 	if (dp != NULL) {
-		sprintf(buf, "<html>\n"
-						"<head>\n"
-						"	<title>%s</title>\n"
-						"</head>\n"
-						"<body>\n"
-						"	<table>\n", r->uri);
+		sprintf(buf, template_pagehead, r->uri);
+		strcat(buf, template_bodystart);
+		strcat(buf, "	<table>\n");
 		while ((ep = readdir(dp))) {
 			sprintf(buf3, "%s%s", r->uri + 1, ep->d_name);
 			sprintf(buf2, "		<tr><td><a href=\"%s\">%s</a></td></tr>\n", buf3, ep->d_name);
 			strcat(buf, buf2);;
 		}
-		strcat(buf, "	</table>\n"
-					"</body>\n"
-					"</html>\n");
+		strcat(buf, "	</table>\n");
+		strcat(buf, template_bodyend);
 		sendall(r->fd, buf, strlen(buf));
 		closedir(dp);
 	} else {
