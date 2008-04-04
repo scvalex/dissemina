@@ -14,17 +14,17 @@ HIDE = @echo;
 
 all: dcheck dissemina
 
-dissemina: dissemina.o pagetempl.o
+dissemina: dissemina.o commonpages.o
 	$(QUIET_LINK)$(CC) $^ -o $@
 
 dissemina.o: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h
 	$(QUIET_CC)$(CC) -c $(CFLAGS) -DVERSION=\"$(VERSION)\" dissemina.c -o $@
 
-pagetempl.c: Resources/pagetempl.c.in
-	$(QUIET_GEN)./drc $< > $@
-
 %.o: %.c
 	$(QUIET_CC)$(CC) -o $*.o -c $(CFLAGS) $<
+
+commonpages.c: Resources/commonpages.c.in
+	$(QUIET_GEN)./drc $< > $@
 
 tags:
 	$(RM) tags

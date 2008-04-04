@@ -11,9 +11,8 @@
 
 extern const char dissemina_version_string[];
 
-extern const char template_pagehead[];
-extern const char template_bodystart[];
-extern const char template_bodyend[];
+extern const char errorpagetext[];
+extern const char simplepagetext[];
 
 enum DoneNotDone {
 	NotDone,
@@ -43,13 +42,15 @@ void create_and_prepend_matcher(MatcherList *list, MatcherFunc f) {
 int error_handler(Request *r) {
 	logprintf(InfoMsg, "sending 404 Not Found");
 
-	char text404[1024];
+	char text404[16284];
+	char textbody[16284];
 	sprintf(text404, "HTTP/1.1 404 Not Found\r\n"
 					 "Connection: close\r\n"
-					 "Content-Type: text/plain\r\n"
+					 "Content-Type: text/xml\r\n"
 					 "Server: Dissemina/%s\r\n"
-					 "\r\n"
-					 "Not Found\n", dissemina_version_string);
+					 "\r\n", dissemina_version_string);
+	sprintf(textbody, errorpagetext, "404 Not Found", "404 Not Found");
+	strcat(text404, textbody);
 	sendall(r->fd, text404, strlen(text404));
 
 	return Done;
@@ -60,7 +61,7 @@ int directory_listing_handler(Request *r) {
 	DIR *dp;
 	struct dirent *ep;
 
-	char buf[4096];
+	char buf[16284];
 	sprintf(buf , "HTTP/1.1 200 OK\r\n"
 			   	  "Connection: close\r\n"
 				  "Content-Type: text/html\r\n"
@@ -70,23 +71,22 @@ int directory_listing_handler(Request *r) {
 		return Done;
 
 	dp = opendir(r->uri);
+	char contbuf[8192];
 	char buf2[1024];
-	char buf3[1024];
 	if (dp != NULL) {
-		sprintf(buf, template_pagehead, r->uri);
-		strcat(buf, template_bodystart);
-		strcat(buf, "	<table>\n");
+		sprintf(contbuf, "<table>\n");
 		while ((ep = readdir(dp))) {
-			sprintf(buf3, "%s%s", r->uri + 1, ep->d_name);
-			sprintf(buf2, "		<tr><td><a href=\"%s\">%s</a></td></tr>\n", buf3, ep->d_name);
-			strcat(buf, buf2);;
+			sprintf(buf2, "<tr><td><a href=\"%s%s\">%s</a></td></tr>\n", r->uri + 1, ep->d_name, ep->d_name);
+			strcat(contbuf, buf2);;
 		}
-		strcat(buf, "	</table>\n");
-		strcat(buf, template_bodyend);
+		strcat(contbuf, "</table>\n");
+
+		sprintf(buf, simplepagetext, r->uri, contbuf);
+
 		sendall(r->fd, buf, strlen(buf));
 		closedir(dp);
 	} else {
-		sprintf(buf, "<html><body>Can't list\n</body></html>");
+		sprintf(buf, simplepagetext, r->uri, "Can't list dir\n");
 		sendall(r->fd, buf, strlen(buf));
 	}
 

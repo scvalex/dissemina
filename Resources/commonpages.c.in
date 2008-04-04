@@ -1,0 +1,9 @@
+/*
+ * commonpages.c.in
+ * 		contains some commonly used pages
+ */
+
+const char errorpagetext[] = @@./errorpage.xml@@;
+
+const char simplepagetext[] = @@./simplepage.xml@@;
+
