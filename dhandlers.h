@@ -64,7 +64,7 @@ int directory_listing_handler(Request *r) {
 	char buf[16284];
 	sprintf(buf , "HTTP/1.1 200 OK\r\n"
 			   	  "Connection: close\r\n"
-				  "Content-Type: text/html\r\n"
+				  "Content-Type: text/xml\r\n"
 				  "Server: Dissemina/%s\r\n"
 				  "\r\n", dissemina_version_string);
 	if (sendall(r->fd, buf, strlen(buf)) == -1)
