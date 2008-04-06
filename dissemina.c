@@ -147,7 +147,7 @@ void check_connections_for_data() {
 			int nbytes;
 			if ((nbytes = recv(fds[i].fd, cr->text + cr->len, MAXREQSIZE - cr->len, 0)) <= 0) {
 				if (nbytes == 0)
-					logprintf(InfoMsg, "listen: socket %d closed", fds[i].fd);
+					logprintf(InfoMsg, "socket %d closed", fds[i].fd);
 				else
 					perror("recv");
 				close(fds[i].fd);

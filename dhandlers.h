@@ -7,8 +7,6 @@
 
 /* Number of bytes sent in one go */
 
-#define SENDBUFSIZE 1024
-
 extern const char dissemina_version_string[];
 
 extern const char errorpagetext[];
@@ -107,7 +105,7 @@ bool match_directory_listing_handler(Request *r) {
 	Request aux = *r;
 	strcat(aux.uri, "/index.xml"); 
 	aux.exists = (stat(aux.uri, &aux.s) == 0);
-	logprintf(InfoMsg, "trying handler of index.xml");
+	logprintf(DebugMsg, "match_directory_listing_handler: trying handler of index.xml");
 	if (assign_handler(&aux) == 0) 
 		*r = aux; /* replace the current request with the new one */
 

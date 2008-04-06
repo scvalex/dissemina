@@ -14,7 +14,8 @@ enum LogMessageCategories {
 	InfoMsg = 1, /* Messages that relay non-critical messages */
 	WarnMsg = 2, /* Warnings */
 	ErrMsg  = 4, /* Errors; i.e. bad things */
-	MustPrintMsg = 8 /* Messages that must be printed at all costs */
+	DebugMsg = 8, /* Guess */
+	MustPrintMsg = 16 /* Messages that must be printed at all costs */
 };
 
 /* Return the current ctime as a string */
@@ -39,23 +40,17 @@ void logprintf(int cat, char *fmt, ...) {
 
 // NETWORK IO
 
-/* Send all data in buf to s */
-int sendall(int s, char *buf, int len) {
-	int total = 0,
-		bytesleft = len,
-		n;
+/* Send data in buf to s */
+int wrappedsend(int s, char *buf, int len) {
+	logprintf(DebugMsg, "Sending %d bytes to socket %d", len, s);
 
-	while (bytesleft > 0) {
-		n = send(s, buf + total, bytesleft, MSG_NOSIGNAL);
-		if (n < 0) {
-			logprintf(ErrMsg, "trouble sending data to %d", s);
-			return -1;
-		}
-		total += n;
-		bytesleft -= n;
+	int numsentbytes = send(s, buf, len, MSG_NOSIGNAL | MSG_DONTWAIT);
+	if (numsentbytes < 0) {
+		logprintf(ErrMsg, "trouble sending data to %d", s);
+		return -1;
 	}
 
-	return 0;
+	return numsentbytes;
 }
 
 /*
@@ -130,6 +125,8 @@ void create_and_prepend_string_envelope(int rec, char *header, char *text) {
 
 	e->prev = &envelopes;
 	e->next = envelopes.next;
+	if (e->next)
+		e->next->prev = e;
 	envelopes.next = e;
 }
 
@@ -148,6 +145,8 @@ void create_and_prepend_file_envelope(int rec, char *header, char *fp) {
 
 	e->prev = &envelopes;
 	e->next = envelopes.next;
+	if (e->next)
+		e->next->prev = e;
 	envelopes.next = e;
 }
 
@@ -159,7 +158,7 @@ Envelope* remove_envelope(Envelope *e) {
 		e->next->prev = p;
 
 	close(e->receiver);
-	logprintf(InfoMsg, "closing connection to socket %d", e->receiver);
+	logprintf(InfoMsg, "closed connection on socket %d", e->receiver);
 	free(e->header);
 	if (e->datatype == DataIsString)
 		free(e->stringdata);
@@ -180,8 +179,9 @@ void process_envelopes() {
 			strncpy(buf, e->nextchar, SENDBUFSIZE-1);
 			buf[SENDBUFSIZE-1] = 0;
 			int len = strlen(buf);
-			e->nextchar += len;
-			sendall(e->receiver, buf, len);
+			int bs = wrappedsend(e->receiver, buf, len);
+			if (bs >= 0)
+				e->nextchar += bs;
 			if (*(e->nextchar) == 0) {
 				e->state = SendingBody;
 				e->nextchar = e->stringdata; /* this could be 0 */
@@ -192,14 +192,21 @@ void process_envelopes() {
 				strncpy(buf, e->nextchar, SENDBUFSIZE-1);
 				buf[SENDBUFSIZE-1] = 0;
 				int len = strlen(buf);
-				e->nextchar += len;
-				sendall(e->receiver, buf, len);
+				int bs = wrappedsend(e->receiver, buf, len);
+				if (bs >= 0)
+					e->nextchar += bs;
 				if (*(e->nextchar) == 0)
 					e = remove_envelope(e);
 			} else if (e->datatype == DataIsFile) {
 				char buf[SENDBUFSIZE];
 				int len = fread(buf, 1, 1024, e->filedata);
-				sendall(e->receiver, buf, len);
+				int bs = wrappedsend(e->receiver, buf, len);
+				if (bs < len) {
+					logprintf(ErrMsg, "sent %d bytes instead of %d", bs, len);
+					logprintf(ErrMsg, "the next instruction could result in an error");
+					fseek(e->filedata, -(len - bs), SEEK_CUR);
+				} else if (bs == -1)
+					fseek(e->filedata, -len, SEEK_CUR);
 				if (feof(e->filedata) || ferror(e->filedata))
 					e = remove_envelope(e);
 			}
