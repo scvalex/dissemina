@@ -1,12 +1,12 @@
-# GET 100 byte file
-GET /file100.txt
+# GET a ``small'' file
+GET /dissemina.c
 	status 200
-	data file100.txt
+	data dissemina.c
 
-# GET and 1K byte file
-GET /file1024.txt
+# GET a large file
+GET /Documentation/how_dissemina_works.txt
 	status 200
-	data file1024.txt
+	data Documentation/how_dissemina_works.txt
 
 # Try to GET an inexistant file
 GET /noWayThisExists
@@ -17,11 +17,11 @@ GET /
 	status 200
 
 # GET root of some other directory
-GET /vah
+GET /Documentation
 	status 200
 
 # GET root of some other directory with a trailing slash
-GET /vah/
+GET /Documentation/
 	status 200
 
 # try to cd out of server environment
