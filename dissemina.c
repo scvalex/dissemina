@@ -55,6 +55,9 @@ RequestList readingRequests;		/* see drequest.h */
 /* The list of mathers used to assing handlers to requests */
 MatcherList matchers;		/* see dhandlers.h */
 
+/* The list of envelopes that are currently beeing sent */
+EnvelopeList envelopes;		/* see dstdio.h */
+
 /* Display an error and quit */
 void quit_err(const char *s) {
 	perror(s);
@@ -175,12 +178,10 @@ void process_requests() {
 			continue;
 		if (cr->handle) {
 			if (cr->handle(cr) == Done) {
-				close(cr->fd);
 				cr = remove_and_free_request(cr);
 			}
 		} else {
 			logprintf(ErrMsg, "null handler encountered");
-			close(cr->fd);
 			cr = remove_and_free_request(cr);
 		}
 	}
@@ -199,7 +200,7 @@ int main(int argc, char *argv[]) {
 	int timeout;
 	for (;;) {
 		timeout = -1; 
-		if (processingRequests.next)
+		if (processingRequests.next || envelopes.next)
 			timeout = 0; /* if there's a reqeust ready, timeout immediately */
 		if (poll(fds, NUM_FDS, timeout) == -1)
 			quit_err("poll");
@@ -207,6 +208,7 @@ int main(int argc, char *argv[]) {
 		get_new_connections();
 		check_connections_for_data();
 		process_requests();
+		process_envelopes();
 	}
 
 	close(listener);

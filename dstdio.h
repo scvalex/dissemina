@@ -2,13 +2,15 @@
  * dstdio.h
  *		standard input and output used by dissemina programmes
  *  
- * REQUIRES unistd.h sys/socket.h time.h stdio.h stdarg.h
+ * REQUIRES unistd.h sys/socket.h time.h stdio.h stdarg.h string.h
  */
+
+/* LOG STDIO */
 
 /* Bitmask for what's printed and what's not */
 extern int PrintableMsgs;
 
-enum MessageCategories {
+enum LogMessageCategories {
 	InfoMsg = 1, /* Messages that relay non-critical messages */
 	WarnMsg = 2, /* Warnings */
 	ErrMsg  = 4, /* Errors; i.e. bad things */
@@ -35,7 +37,7 @@ void logprintf(int cat, char *fmt, ...) {
 	fprintf(stderr, "\n");
 }
 
-// NETWORK IO FUNCTIONS START HERE
+// NETWORK IO
 
 /* Send all data in buf to s */
 int sendall(int s, char *buf, int len) {
@@ -67,4 +69,141 @@ int sendall(int s, char *buf, int len) {
  * closed. Dcheck.c, on the other hand, waits for the other end (i.e. the
  * server) to close the connection.
  */
+
+#define SENDBUFSIZE 1024
+
+enum DataTypes {
+	DataIsString = 1,
+	DataIsFile
+};
+
+enum States {
+	SendingHeader = 1,
+	SendingBody
+};
+
+/* Container for outgoing messages */
+typedef struct envelope_t {
+	/* Fd of the receiver */
+	int receiver;
+
+	/* Header of the message */
+	char *header;
+
+	/* Stores the current state of processing.
+	 * Is either SendingHeader or SendingBody.
+	 * This determines the behavious of process_envelopes */
+	int state;
+
+	/* What am I sending? A string? A file? */
+	int datatype;
+
+	/* Pointer to the string (is ignored if datatype is DataIsFile) */
+	char *stringdata;
+	/* Pointer to the next character that should be sent 
+	 * NOTE this is also used when seanding out the header */
+	char *nextchar;
+
+	/* Pointer to the FILE stream (is ignored if datatype is
+	 * DataIsString)*/
+	FILE *filedata;
+
+	/* Pointer to the previous and next envelopes in the list */
+	struct envelope_t *prev, *next;
+} Envelope;
+typedef Envelope EnvelopeList;
+
+extern EnvelopeList envelopes; /* see dissemina.c */
+
+/* Creates a string envelope with the data given and prepends it to
+ * the envelopes. */
+void create_and_prepend_string_envelope(int rec, char *header, char *text) {
+	Envelope *e = malloc(sizeof(Envelope));
+	memset(e, 0, sizeof(Envelope));
+
+	e->receiver = rec;
+	e->header = header;
+	e->datatype = DataIsString;
+	e->stringdata = text;
+	e->nextchar = header;
+	e->state = SendingHeader;
+
+	e->prev = &envelopes;
+	e->next = envelopes.next;
+	envelopes.next = e;
+}
+
+/* Creates a file envelope with the filepath given and prepends it to
+ * the envelopes. */
+void create_and_prepend_file_envelope(int rec, char *header, char *fp) {
+	Envelope *e = malloc(sizeof(Envelope));
+	memset(e, 0, sizeof(Envelope));
+
+	e->receiver = rec;
+	e->header = header;
+	e->datatype = DataIsFile;
+	e->filedata = fopen(fp, "rb");
+	e->nextchar = header;
+	e->state = SendingHeader;
+
+	e->prev = &envelopes;
+	e->next = envelopes.next;
+	envelopes.next = e;
+}
+
+/* Removes an envelope from the list and free()s it */
+Envelope* remove_envelope(Envelope *e) {
+	Envelope *p = e->prev;
+	p->next = e->next;
+	if (e->next)
+		e->next->prev = p;
+
+	close(e->receiver);
+	logprintf(InfoMsg, "closing connection to socket %d", e->receiver);
+	free(e->header);
+	if (e->datatype == DataIsString)
+		free(e->stringdata);
+	else if (e->datatype == DataIsFile)
+		fclose(e->filedata);
+
+	free(e);
+	return p;
+}
+
+/* Processes an envelopes sending the data for each envelope and
+ * removing used-up envelopes */
+void process_envelopes() {
+	Envelope *e;
+	for (e = envelopes.next; e; e = e->next) {
+		if (e->state == SendingHeader) {
+			char buf[SENDBUFSIZE];
+			strncpy(buf, e->nextchar, SENDBUFSIZE-1);
+			buf[SENDBUFSIZE-1] = 0;
+			int len = strlen(buf);
+			e->nextchar += len;
+			sendall(e->receiver, buf, len);
+			if (*(e->nextchar) == 0) {
+				e->state = SendingBody;
+				e->nextchar = e->stringdata; /* this could be 0 */
+			}
+		} else if (e->state == SendingBody) {
+			if (e->datatype == DataIsString) {
+				char buf[SENDBUFSIZE];
+				strncpy(buf, e->nextchar, SENDBUFSIZE-1);
+				buf[SENDBUFSIZE-1] = 0;
+				int len = strlen(buf);
+				e->nextchar += len;
+				sendall(e->receiver, buf, len);
+				if (*(e->nextchar) == 0)
+					e = remove_envelope(e);
+			} else if (e->datatype == DataIsFile) {
+				char buf[SENDBUFSIZE];
+				int len = fread(buf, 1, 1024, e->filedata);
+				sendall(e->receiver, buf, len);
+				if (feof(e->filedata) || ferror(e->filedata))
+					e = remove_envelope(e);
+			}
+		}
+	}
+}
 
