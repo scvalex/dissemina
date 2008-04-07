@@ -56,17 +56,19 @@ distclean: clean
 realclean: clean
 
 .PHONY: test
+.IGNORE: test
 test: dissemina
-	pkill dissemina || true
+	pkill dissemina 
 	./dissemina &
 	sleep 1
-	cat tests.dcheck | ./dcheck -s | grep FAILED || true
-	pkill dissemina || true
+	cat tests.dcheck | ./dcheck -s | grep FAILED 
+	pkill dissemina 
 
+.IGNORE: testv
 testv: dissemina
-	pkill dissemina || true
+	pkill dissemina
 	./dissemina &
 	sleep 1
 	cat tests.dcheck | ./dcheck -v
-	pkill dissemina || true
+	pkill dissemina
 
