@@ -15,7 +15,7 @@ HIDE = @echo;
 .PHONY: all
 all: dcheck dissemina
 
-dissemina: dissemina.o commonpages.o
+dissemina: dissemina.o commonpages.o dstdio.o
 	$(QUIET_LINK)$(CC) $^ -o $@
 
 dissemina.o: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h

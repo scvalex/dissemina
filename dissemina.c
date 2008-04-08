@@ -9,15 +9,14 @@
 #define DEBUG 0
 #define _XOPEN_SOURCE 1 /* Needed for POLLRDNORM... */
 
-#include <arpa/inet.h>
 #include <ctype.h>
 #include <dirent.h>
-#include <netinet/in.h>
 #include <poll.h>
-#include <stdarg.h>
 #include <stdbool.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <arpa/inet.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -57,38 +56,6 @@ MatcherList matchers;		/* see dhandlers.h */
 
 /* The list of envelopes that are currently beeing sent */
 EnvelopeList envelopes;		/* see dstdio.h */
-
-/* Display an error and quit */
-void quit_err(const char *s) {
-	perror(s);
-	exit(1);
-}
-
-/* Create the listener and return it */
-int setup_listener() {
-	int listener;
-
-	if ((listener = socket(PF_INET, SOCK_STREAM, 0)) == -1)
-		quit_err("socket");
-
-	int yes = 1;
-	if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (char*)&yes, sizeof(yes)) < 0)
-		quit_err("setsockopt");
-
-	struct sockaddr_in myaddr;
-	memset(&myaddr, 0, sizeof(myaddr));
-	myaddr.sin_family = AF_INET;
-	myaddr.sin_port = htons(LOCAL_PORT);
-	myaddr.sin_addr.s_addr = INADDR_ANY;
-	if (bind(listener, (struct sockaddr*)&myaddr, sizeof(myaddr)) == -1)
-		quit_err("bind");
-
-	if (listen(listener, 10) == -1)
-		quit_err("listen");
-	logprintf(MustPrintMsg, "listening on port %d", LOCAL_PORT);
-
-	return listener;
-}
 
 /* fills in a Request, mainly. by looking at it's text */
 void fill_in_request(Request *r) {
@@ -188,8 +155,8 @@ void process_requests() {
 }
 
 int main(int argc, char *argv[]) {
-	listener = setup_listener();		/* see dnetio.h */
-	init_matchers();					/* see dhandlers.h */
+	listener = setup_listener(LOCAL_PORT);		/* see dnetio.h */
+	init_matchers();							/* see dhandlers.h */
 
 	int i;
 	for (i = 0; i < NUM_FDS; ++i)
