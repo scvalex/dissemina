@@ -1,3 +1,7 @@
+/* Copyright (C) Alexandru Scvortov <scvalex@gmail.com>
+ * This software is distributed under the terms of the MIT License.
+ * See the LICENSE file for details. */
+
 /*
  * dhandler.h
  *   base handlers and their associated match functions
