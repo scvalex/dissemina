@@ -1,5 +1,11 @@
-/* Copyright (C) Alexandru Scvortov <scvalex@gmail.com>
- * This software is distributed under the terms of the MIT License.
+/* Dissemina
+ *
+ * Copyright (c) 2008 Alexandru Scvortov
+ *
+ * This programme is distributed under
+ *
+ *     The MIT License
+ * 
  * See the LICENSE file for details. */
 
 /*
