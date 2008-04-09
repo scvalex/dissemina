@@ -15,7 +15,7 @@ HIDE = @echo;
 .PHONY: all
 all: dcheck dissemina
 
-dissemina: dissemina.o commonpages.o dstdio.o
+dissemina: dissemina.o commonpages.o dnet.o dstdio.o
 	$(QUIET_LINK)$(CC) $^ -o $@
 
 dissemina.o: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h
@@ -48,10 +48,11 @@ FILES: *.[ch]
 clean:
 	$(RM) dissemina
 	$(RM) *.o
-	$(RM) $(DRC_GENERATED_FILES)
 
 .PHONY: distclean
 distclean: clean
+	$(RM) $(DRC_GENERATED_FILES)
+
 .PHONY: realclean
 realclean: clean
 

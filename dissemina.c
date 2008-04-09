@@ -28,13 +28,13 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include "dstdio.h"
+#include "dnet.h"
 #include "dstring.h"
 #include "drequest.h"
 #include "dhandlers.h"
