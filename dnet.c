@@ -62,6 +62,22 @@ static int wrappedsend(int s, char *buf, int len) {
 	return numsentbytes;
 }
 
+/* Get some data from s.
+ * Yes, this is an extraordinarely thin wrapper around recv. */
+int drecv(int s, char *buf, int sz, int flgs) {
+	return recv(s, buf, sz, flgs);
+}
+
+/* Accepts a connection from s and returns a file descriptor to it. */
+int accept_connection(int s) {
+	struct sockaddr_in remoteaddr;
+	socklen_t addrlen = sizeof(remoteaddr);
+	int newfd;
+	if ((newfd = accept(s, (struct sockaddr*)&remoteaddr, &addrlen)) == -1)
+		quit_err("accept");
+	return newfd;
+}
+
 /*
  * If you were expecting to find a recvall() or something of the kind here,
  * you're in for a dissapointment.

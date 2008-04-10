@@ -23,15 +23,11 @@
 #include <dirent.h>
 #include <poll.h>
 #include <stdbool.h>
-#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <arpa/inet.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 
 #include "dstdio.h"
 #include "dnet.h"
@@ -90,11 +86,7 @@ void fill_in_request(Request *r) {
 /* check listener for new connections and write them into fds and requests  */
 void get_new_connections() {
 	if (fds[0].revents & POLLRDNORM) {
-		struct sockaddr_in remoteaddr;
-		socklen_t addrlen = sizeof(remoteaddr);
-		int newfd;
-		if ((newfd = accept(listener, (struct sockaddr*)&remoteaddr, &addrlen)) == -1)
-			quit_err("accept");
+		int newfd = accept_connection(listener);
 
 		int i;
 		for (i = 1; (i < NUM_FDS) && (fds[i].fd != -1); ++i)
@@ -111,7 +103,7 @@ void get_new_connections() {
 		nr->fd = newfd;
 		nr->state = ReadingRequest;
 		fdToRequest[i] = nr;
-		logprintf(InfoMsg, "connection from %s on socket %d", inet_ntoa(remoteaddr.sin_addr), newfd);
+		logprintf(InfoMsg, "connection from somewhere on socket %d", newfd);
 	}
 }
 
@@ -122,11 +114,11 @@ void check_connections_for_data() {
 		if (fds[i].revents & POLLRDNORM) {
 			Request *cr = fdToRequest[i]; /* The current request */
 			int nbytes;
-			if ((nbytes = recv(fds[i].fd, cr->text + cr->len, MAXREQSIZE - cr->len, 0)) <= 0) {
+			if ((nbytes = drecv(fds[i].fd, cr->text + cr->len, MAXREQSIZE - cr->len, 0)) <= 0) {
 				if (nbytes == 0)
 					logprintf(InfoMsg, "socket %d closed", fds[i].fd);
 				else
-					perror("recv");
+					perror("drecv");
 				close(fds[i].fd);
 				fds[i].fd = -1;
 				remove_and_free_request(cr);
@@ -191,4 +183,5 @@ int main(int argc, char *argv[]) {
 	close(listener);
 	return 0;
 }
+
 

@@ -15,6 +15,10 @@
 
 int setup_listener(int port);
 	
+int drecv(int s, char *buf, int sz, int flgs);
+
+int accept_connection(int s);
+
 /* Container for outgoing messages */
 typedef struct envelope_t {
 	/* Fd of the receiver */
