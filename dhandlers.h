@@ -37,6 +37,28 @@ typedef Matcher MatcherList;
 
 extern MatcherList matchers;
 
+/* Returns non-zero if file exists or zero otherwise */
+int fileexists(char *fp) {
+	struct stat s;
+	return (stat(fp, &s) == 0);
+}
+
+/* Return non-zero is file is normal or zero otherwise */
+int isnormfile(char *fp) {
+	struct stat s;
+	if (stat(fp, &s) != 0)
+		return 0;
+	return S_ISREG(s.st_mode);
+}
+
+/* Return non-zero is file is a directory or zero otherwise */
+int isdir(char *fp) {
+	struct stat s;
+	if (stat(fp, &s) != 0)
+		return 0;
+	return S_ISDIR(s.st_mode);
+}
+
 /* Prepend a matcher to the specified list */
 void create_and_prepend_matcher(MatcherList *list, MatcherFunc f) {
 	Matcher *r = malloc(sizeof(Matcher));
@@ -104,7 +126,7 @@ int directory_listing_handler(Request *r) {
 int assign_handler(Request*); 
 /* match is succesful if URI is a directory */
 bool match_directory_listing_handler(Request *r) {
-	if (!r->exists || !S_ISDIR(r->s.st_mode))
+	if (!fileexists(r->uri) || !isdir(r->uri))
 		return false;
 
 	if (r->uri[strlen(r->uri) - 1] != '/')
@@ -114,7 +136,6 @@ bool match_directory_listing_handler(Request *r) {
 	/* maybe there's an index.xml file to send?  */
 	Request aux = *r;
 	strcat(aux.uri, "/index.xml"); 
-	aux.exists = (stat(aux.uri, &aux.s) == 0);
 	logprintf(DebugMsg, "match_directory_listing_handler: trying handler of index.xml");
 	if (assign_handler(&aux) == 0) 
 		*r = aux; /* replace the current request with the new one */
@@ -155,7 +176,7 @@ int simple_http_handler(Request *r) {
 
 /* match is succesful if uri is a plain file */
 bool match_simple_http_handler(Request *r) {
-	if (!r->exists || !S_ISREG(r->s.st_mode))
+	if (!fileexists(r->uri) || !isnormfile(r->uri))
 		return false; /* not interested */
 
 	r->handle = simple_http_handler;

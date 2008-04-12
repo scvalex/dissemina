@@ -79,8 +79,6 @@ void fill_in_request(Request *r) {
 		r->uri[j + 1] = *a;
 	r->uri[j + 1] = 0;
 	r->state = ProcessingRequest; /* Mark the request for processing */
-
-	r->exists = (stat(r->uri, &r->s) == 0); /* is the file valid, a directory, etc... */
 }
 
 /* check listener for new connections and write them into fds and requests  */

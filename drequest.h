@@ -47,10 +47,6 @@ typedef struct request_s {
 	FILE *fi;
 	/* Current state of the request; SEE the RequestState enum */
 	int state;
-	/* The stat strucuture of the uri */
-	struct stat s;
-	/* If non-zero, file exists and s is valid */
-	bool exists;
 	/* Pointer to this Request's handler
 	 * Initially, this is 0 but gets assigned a value by
 	 * assign_handler. */		
