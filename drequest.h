@@ -58,9 +58,41 @@ typedef struct request_s {
 } Request;
 typedef Request RequestList;
 
-void skipwhite(char *buf, int *i) {
+/* Incrementes i past next whitespace in buf */
+static void skipwhite(char *buf, int *i) {
 	while (*i && isspace(buf[*i]))
 		++(*i);
+}
+
+/* Extracts a single key-value pair from buf.
+ * Incrementes i.
+ * Returns true if something was extracted, false otherwise. */
+static bool extracthead(char *buf, int *i) {
+	char key[1024];
+	int j = 0;
+	while ((j < 1023) && (buf[*i] != ':') && (buf[*i] != '\r') && buf[*i]) {
+		key[j] = buf[*i];
+		++(*i);
+		++j;
+	}
+	if (j == 0)
+		return false;
+	key[j] = 0;
+	++(*i); /* jump the colon */
+
+	char value[1024];
+	j = 0;
+	while ((j < 1023) && (buf[*i] != '\r') && buf[*i]) {
+		value[j] = buf[*i];
+		++(*i);
+		++j;
+	}
+	if (j == 0)
+		return false;
+	value[j] = 0;
+
+	logprintf(DebugMsg, "K:V -> %s: %s", key, value);
+	return true;
 }
 
 /* Parse a received request extracting its URI into r->uri and its
@@ -88,12 +120,22 @@ void parsereq(Request *r) {
 		return;
 	if ((r->uri[1] != '/') || (strstr(r->uri, "..")))
 		return;
+	skipwhite(r->text, &i);
 
 	/* Skip the protocol string */
 	while ((i < r->len) && !isspace(r->text[i]))
 		++i;
 	if (i == r->len)
 		return;
+	skipwhite(r->text, &i);
+	
+	int j = 0;
+	while (j < MAXHEADERSNUM) {
+		if (!extracthead(r->text, &i))
+			break;
+		++j;
+		skipwhite(r->text, &i);
+	}
 
 	r->valid = true;
 }
