@@ -23,7 +23,8 @@
 extern int PrintableMsgs;
 
 /* Return the current ctime as a string */
-static char* getCurrentTime() {
+static char* getCurrentTime() 
+{
 	time_t t = time(NULL);
 	struct tm *ltm = localtime(&t);
 	static char tmp[64];
@@ -32,7 +33,8 @@ static char* getCurrentTime() {
 }
 
 /* Output a warning */
-void logprintf(int cat, char *fmt, ...) {
+void logprintf(int cat, char *fmt, ...) 
+{
 	if (((PrintableMsgs & cat) == 0) && ((cat & MustPrintMsg) == 0))
 		return;
 	va_list ap;
@@ -43,7 +45,8 @@ void logprintf(int cat, char *fmt, ...) {
 }
 
 /* Display an error and quit */
-void quit_err(const char *s) {
+void quit_err(const char *s) 
+{
 	perror(s);
 	exit(1);
 }

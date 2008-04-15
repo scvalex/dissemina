@@ -25,7 +25,8 @@
 #include "dnet.h"
 
 /* Create the listener and return it */
-int setup_listener(int port) {
+int setup_listener(int port) 
+{
 	int listener;
 
 	if ((listener = socket(PF_INET, SOCK_STREAM, 0)) == -1)
@@ -49,8 +50,10 @@ int setup_listener(int port) {
 
 	return listener;
 }
+
 /* Send data in buf to s */
-static int wrappedsend(int s, char *buf, int len) {
+static int wrappedsend(int s, char *buf, int len) 
+{
 	logprintf(DebugMsg, "Sending %d bytes to socket %d", len, s);
 
 	int numsentbytes = send(s, buf, len, MSG_NOSIGNAL | MSG_DONTWAIT);
@@ -64,12 +67,14 @@ static int wrappedsend(int s, char *buf, int len) {
 
 /* Get some data from s.
  * Yes, this is an extraordinarely thin wrapper around recv. */
-int drecv(int s, char *buf, int sz, int flgs) {
+int drecv(int s, char *buf, int sz, int flgs) 
+{
 	return recv(s, buf, sz, flgs);
 }
 
 /* Accepts a connection from s and returns a file descriptor to it. */
-int accept_connection(int s) {
+int accept_connection(int s) 
+{
 	struct sockaddr_in remoteaddr;
 	socklen_t addrlen = sizeof(remoteaddr);
 	int newfd;
@@ -106,7 +111,8 @@ extern EnvelopeList envelopes; /* see dissemina.c */
 
 /* Creates a string envelope with the data given and prepends it to
  * the envelopes. */
-void create_and_prepend_string_envelope(int rec, char *header, char *text) {
+void create_and_prepend_string_envelope(int rec, char *header, char *text) 
+{
 	Envelope *e = malloc(sizeof(Envelope));
 	memset(e, 0, sizeof(Envelope));
 
@@ -126,7 +132,8 @@ void create_and_prepend_string_envelope(int rec, char *header, char *text) {
 
 /* Creates a file envelope with the filepath given and prepends it to
  * the envelopes. */
-void create_and_prepend_file_envelope(int rec, char *header, char *fp) {
+void create_and_prepend_file_envelope(int rec, char *header, char *fp) 
+{
 	Envelope *e = malloc(sizeof(Envelope));
 	memset(e, 0, sizeof(Envelope));
 
@@ -145,7 +152,8 @@ void create_and_prepend_file_envelope(int rec, char *header, char *fp) {
 }
 
 /* Removes an envelope from the list and free()s it */
-static Envelope* remove_envelope(Envelope *e) {
+static Envelope* remove_envelope(Envelope *e) 
+{
 	Envelope *p = e->prev;
 	p->next = e->next;
 	if (e->next)
@@ -165,7 +173,8 @@ static Envelope* remove_envelope(Envelope *e) {
 
 /* Processes an envelopes sending the data for each envelope and
  * removing used-up envelopes */
-void process_envelopes() {
+void process_envelopes() 
+{
 	Envelope *e;
 	for (e = envelopes.next; e; e = e->next) {
 		if (e->state == SendingHeader) {
@@ -199,8 +208,9 @@ void process_envelopes() {
 					logprintf(ErrMsg, "sent %d bytes instead of %d", bs, len);
 					logprintf(ErrMsg, "the next instruction could result in an error");
 					fseek(e->filedata, -(len - bs), SEEK_CUR);
-				} else if (bs == -1)
+				} else if (bs == -1) {
 					fseek(e->filedata, -len, SEEK_CUR);
+				}
 				if (feof(e->filedata) || ferror(e->filedata))
 					e = remove_envelope(e);
 			}

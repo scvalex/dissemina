@@ -64,7 +64,8 @@ MatcherList matchers;		/* see dhandlers.h */
 EnvelopeList envelopes;		/* see dstdio.h */
 
 /* check listener for new connections and write them into fds and requests  */
-void get_new_connections() {
+void get_new_connections() 
+{
 	if (fds[0].revents & POLLRDNORM) {
 		int newfd = accept_connection(listener);
 
@@ -87,7 +88,8 @@ void get_new_connections() {
 }
 
 /* reads data from sockets marked by get_new_connections() */
-void check_connections_for_data() {
+void check_connections_for_data() 
+{
 	int i;
 	for (i = 1; i < NUM_FDS; ++i)
 		if (fds[i].revents & POLLRDNORM) {
@@ -119,7 +121,8 @@ void check_connections_for_data() {
 }
 
 /* write data to sockets */
-void process_requests() {
+void process_requests() 
+{
 	Request *cr;
 	for (cr = processingRequests.next; cr; cr = cr->next) {
 		if (cr->handle) {
@@ -133,7 +136,8 @@ void process_requests() {
 	}
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) 
+{
 	listener = setup_listener(LOCAL_PORT);		/* see dnetio.h */
 	init_matchers();							/* see dhandlers.h */
 

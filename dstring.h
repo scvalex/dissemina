@@ -16,7 +16,8 @@
  */
 
 /* Returns 1 if s starts with w */
-int starts_with(char *s, char *w) {
+int starts_with(char *s, char *w) 
+{
 	char *a = s,
 		 *b = w;
 
@@ -28,7 +29,8 @@ int starts_with(char *s, char *w) {
 }
 
 /* Returns true if s ends with w */
-int ends_with(const char *s, const char *w) {
+int ends_with(const char *s, const char *w) 
+{
 	int i = strlen(s) - 1,
 		j = strlen(w) - 1;
 

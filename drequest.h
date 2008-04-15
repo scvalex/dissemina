@@ -59,7 +59,8 @@ typedef struct request_s {
 typedef Request RequestList;
 
 /* Incrementes i past next whitespace in buf */
-static void skipwhite(char *buf, int *i) {
+static void skipwhite(char *buf, int *i) 
+{
 	while (*i && isspace(buf[*i]))
 		++(*i);
 }
@@ -67,7 +68,8 @@ static void skipwhite(char *buf, int *i) {
 /* Extracts a single key-value pair from buf.
  * Incrementes i.
  * Returns true if something was extracted, false otherwise. */
-static bool extracthead(char *buf, int *i) {
+static bool extracthead(char *buf, int *i) 
+{
 	char key[1024];
 	int j = 0;
 	while ((j < 1023) && (buf[*i] != ':') && (buf[*i] != '\r') && buf[*i]) {
@@ -97,7 +99,8 @@ static bool extracthead(char *buf, int *i) {
 
 /* Parse a received request extracting its URI into r->uri and its
  * headers into r->headers. */
-void parsereq(Request *r) {
+void parsereq(Request *r) 
+{
 	int i = 0;
 	/* Extract the HTTP method */
 	while ((i < r->len) && (i < 9) && !isspace(r->text[i])) {
@@ -141,7 +144,8 @@ void parsereq(Request *r) {
 }
 
 /* Prepend a request to the specified list */
-void prepend_request(RequestList *list, Request *r) {
+void prepend_request(RequestList *list, Request *r) 
+{
 	r->next = list->next;
 	if (r->next)
 		r->next->prev = r; /* link with next*/
@@ -150,7 +154,8 @@ void prepend_request(RequestList *list, Request *r) {
 }
 
 /* Creates and prepends a new Request to specified list */
-Request* create_and_prepend_request(RequestList *list) {
+Request* create_and_prepend_request(RequestList *list) 
+{
 	Request *nr = malloc(sizeof(Request)); /* create */
 	memset(nr, 0, sizeof(Request));
 	prepend_request(list, nr);
@@ -159,7 +164,8 @@ Request* create_and_prepend_request(RequestList *list) {
 
 /* Removes a request from list and returns a
  * pointer to it */
-Request* pop_request(Request *r) {
+Request* pop_request(Request *r) 
+{
 	Request *p = r->prev;
 	p->next = r->next;
 	if (r->next)
@@ -170,7 +176,8 @@ Request* pop_request(Request *r) {
 
 /* Remove a request from the list and free()s it 
  * Returns a pointer to the PREVIOUS location */
-Request* remove_and_free_request(Request *r) {
+Request* remove_and_free_request(Request *r) 
+{
 	Request *p = r->prev;
 	free(pop_request(r));
 	return p;

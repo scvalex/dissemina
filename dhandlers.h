@@ -38,13 +38,15 @@ typedef Matcher MatcherList;
 extern MatcherList matchers;
 
 /* Returns non-zero if file exists or zero otherwise */
-int fileexists(char *fp) {
+int fileexists(char *fp) 
+{
 	struct stat s;
 	return (stat(fp, &s) == 0);
 }
 
 /* Return non-zero is file is normal or zero otherwise */
-int isnormfile(char *fp) {
+int isnormfile(char *fp) 
+{
 	struct stat s;
 	if (stat(fp, &s) != 0)
 		return 0;
@@ -52,7 +54,8 @@ int isnormfile(char *fp) {
 }
 
 /* Return non-zero is file is a directory or zero otherwise */
-int isdir(char *fp) {
+int isdir(char *fp) 
+{
 	struct stat s;
 	if (stat(fp, &s) != 0)
 		return 0;
@@ -60,7 +63,8 @@ int isdir(char *fp) {
 }
 
 /* Prepend a matcher to the specified list */
-void create_and_prepend_matcher(MatcherList *list, MatcherFunc f) {
+void create_and_prepend_matcher(MatcherList *list, MatcherFunc f) 
+{
 	Matcher *r = malloc(sizeof(Matcher));
 	memset(r, 0, sizeof(Matcher));
 	r->matches = f;
@@ -69,7 +73,8 @@ void create_and_prepend_matcher(MatcherList *list, MatcherFunc f) {
 }
 
 /* Send 404 Not Found */
-int error_handler(Request *r) {
+int error_handler(Request *r) 
+{
 	logprintf(InfoMsg, "sending 404 Not Found");
 
 	char *msghead = malloc(sizeof(char) * 1024);
@@ -87,7 +92,8 @@ int error_handler(Request *r) {
 }
 
 /* Send a 400 Bad Request */
-int bad_request_handler(Request *r) {
+int bad_request_handler(Request *r) 
+{
 	logprintf(WarnMsg, "sending 400 Bad Request");
 
 	char *msghead = malloc(sizeof(char) * 1024);
@@ -105,14 +111,16 @@ int bad_request_handler(Request *r) {
 }
 
 /* Match requests r that have r->valid false. */
-bool match_bad_requests(Request *r) {
+bool match_bad_requests(Request *r) 
+{
 	if (!r->valid) 
 		r->handle = bad_request_handler;
 	return !r->valid;
 }
 
 /* send a list of the files in specified directory */
-int directory_listing_handler(Request *r) {
+int directory_listing_handler(Request *r) 
+{
 	DIR *dp;
 	struct dirent *ep;
 
@@ -150,7 +158,8 @@ int directory_listing_handler(Request *r) {
 
 int assign_handler(Request*); 
 /* match is succesful if URI is a directory */
-bool match_directory_listings(Request *r) {
+bool match_directory_listings(Request *r) 
+{
 	if (!fileexists(r->uri) || !isdir(r->uri))
 		return false;
 
@@ -178,7 +187,8 @@ const char *FileHandle[FileHandleNum][4] = {
 };
 
 /* Send file r->uri to s */
-int simple_http_handler(Request *r) {
+int simple_http_handler(Request *r) 
+{
 	int fh = 0; /* guess Content-Type from file extension */
 	int i;
 	for (i = 1; i < FileHandleNum; ++i)
@@ -200,7 +210,8 @@ int simple_http_handler(Request *r) {
 }
 
 /* match is succesful if uri is a plain file */
-bool match_simple_http(Request *r) {
+bool match_simple_http(Request *r) 
+{
 	if (!fileexists(r->uri) || !isnormfile(r->uri))
 		return false; /* not interested */
 
@@ -209,7 +220,8 @@ bool match_simple_http(Request *r) {
 }
 
 /* set up the basic matchers */
-void init_matchers() {
+void init_matchers() 
+{
 	create_and_prepend_matcher(&matchers, match_directory_listings);
 	create_and_prepend_matcher(&matchers, match_simple_http);
 	create_and_prepend_matcher(&matchers, match_bad_requests);
@@ -218,7 +230,8 @@ void init_matchers() {
 /* NOTE this function might make other modifications to the Request
  * (such as changing the URI) 
  * RETURNS -1 on error; 0 on success */
-int assign_handler(Request *r) {
+int assign_handler(Request *r) 
+{
 	Matcher *m;
 	for (m = matchers.next; m; m = m->next)
 		if (m->matches(r))
