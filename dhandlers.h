@@ -72,42 +72,35 @@ void create_and_prepend_matcher(MatcherList *list, MatcherFunc f)
 	list->next = r;
 }
 
-/* Send 404 Not Found */
-int error_handler(Request *r) 
+/* Sends out a generic error message. */
+static int general_error_handler(Request *r, char *errcode) 
 {
-	logprintf(InfoMsg, "sending 404 Not Found");
+	logprintf(InfoMsg, "sending %s", errcode);
 
 	char *msghead = malloc(sizeof(char) * 1024);
-	sprintf(msghead, "HTTP/1.1 404 Not Found\r\n"
+	sprintf(msghead, "HTTP/1.1 %s\r\n"
 					 "Connection: close\r\n"
 					 "Content-Type: text/xml\r\n"
 					 "Server: Dissemina/%s\r\n"
-					 "\r\n", dissemina_version_string);
+					 "\r\n", errcode, dissemina_version_string);
 	char *msgbody = malloc(sizeof(char) * 16284);
-	sprintf(msgbody, errorpagetext, "404 Not Found", "404 Not Found");
+	sprintf(msgbody, errorpagetext, errcode, errcode);
 
 	create_and_prepend_string_envelope(r->fd, msghead, msgbody);
 
 	return Done;
 }
 
+/* Send 404 Not Found */
+int error_handler(Request *r) 
+{
+	return general_error_handler(r, "404 Not Found");
+}
+
 /* Send a 400 Bad Request */
 int bad_request_handler(Request *r) 
 {
-	logprintf(WarnMsg, "sending 400 Bad Request");
-
-	char *msghead = malloc(sizeof(char) * 1024);
-	sprintf(msghead, "HTTP/1.1 400 Bad Request\r\n"
-					 "Connection: close\r\n"
-					 "Content-Type: text/xml\r\n"
-					 "Server: Dissemina/%s\r\n"
-					 "\r\n", dissemina_version_string);
-	char *msgbody = malloc(sizeof(char) * 16284);
-	sprintf(msgbody, errorpagetext, "400 Bad Request", "400 Bad Request");
-
-	create_and_prepend_string_envelope(r->fd, msghead, msgbody);
-
-	return Done;
+	return general_error_handler(r, "400 Bad Request");
 }
 
 /* Match requests r that have r->valid false. */
