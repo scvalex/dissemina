@@ -68,7 +68,7 @@ void create_and_prepend_matcher(MatcherList *list, MatcherFunc f) {
 	list->next = r;
 }
 
-/* Send 404 Not Found to s */
+/* Send 404 Not Found */
 int error_handler(Request *r) {
 	logprintf(InfoMsg, "sending 404 Not Found");
 
@@ -84,6 +84,31 @@ int error_handler(Request *r) {
 	create_and_prepend_string_envelope(r->fd, msghead, msgbody);
 
 	return Done;
+}
+
+/* Send a 400 Bad Request */
+int bad_request_handler(Request *r) {
+	logprintf(WarnMsg, "sending 400 Bad Request");
+
+	char *msghead = malloc(sizeof(char) * 1024);
+	sprintf(msghead, "HTTP/1.1 400 Bad Request\r\n"
+					 "Connection: close\r\n"
+					 "Content-Type: text/xml\r\n"
+					 "Server: Dissemina/%s\r\n"
+					 "\r\n", dissemina_version_string);
+	char *msgbody = malloc(sizeof(char) * 16284);
+	sprintf(msgbody, errorpagetext, "400 Bad Request", "400 Bad Request");
+
+	create_and_prepend_string_envelope(r->fd, msghead, msgbody);
+
+	return Done;
+}
+
+/* Match requests r that have r->valid false. */
+bool match_bad_requests(Request *r) {
+	if (!r->valid) 
+		r->handle = bad_request_handler;
+	return !r->valid;
 }
 
 /* send a list of the files in specified directory */
@@ -125,7 +150,7 @@ int directory_listing_handler(Request *r) {
 
 int assign_handler(Request*); 
 /* match is succesful if URI is a directory */
-bool match_directory_listing_handler(Request *r) {
+bool match_directory_listings(Request *r) {
 	if (!fileexists(r->uri) || !isdir(r->uri))
 		return false;
 
@@ -175,7 +200,7 @@ int simple_http_handler(Request *r) {
 }
 
 /* match is succesful if uri is a plain file */
-bool match_simple_http_handler(Request *r) {
+bool match_simple_http(Request *r) {
 	if (!fileexists(r->uri) || !isnormfile(r->uri))
 		return false; /* not interested */
 
@@ -185,8 +210,9 @@ bool match_simple_http_handler(Request *r) {
 
 /* set up the basic matchers */
 void init_matchers() {
-	create_and_prepend_matcher(&matchers, match_directory_listing_handler);
-	create_and_prepend_matcher(&matchers, match_simple_http_handler);
+	create_and_prepend_matcher(&matchers, match_directory_listings);
+	create_and_prepend_matcher(&matchers, match_simple_http);
+	create_and_prepend_matcher(&matchers, match_bad_requests);
 }
 
 /* NOTE this function might make other modifications to the Request

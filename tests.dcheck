@@ -26,7 +26,7 @@ GET /Documentation/
 
 # try to cd out of server environment
 GET /../README
-	status 404
+	status 400
 
 # try an inexistant command
 POST /vah.cgi

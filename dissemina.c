@@ -63,24 +63,6 @@ MatcherList matchers;		/* see dhandlers.h */
 /* The list of envelopes that are currently beeing sent */
 EnvelopeList envelopes;		/* see dstdio.h */
 
-/* fills in a Request, mainly. by looking at it's text */
-void fill_in_request(Request *r) {
-	char *a = r->text + 3; /* jump over the GET */
-	for (; *a == ' '; ++a);
-
-	if ((*a != '/') || strstr(a, "..")) { /* client might be trying to jump out of server dir */
-		r->state = ProcessingRequest;
-		return; /* request is invalid */
-	}
-
-	r->uri[0] = '.'; /* request starts with a slash; prepend a dot so that it's a valid path */
-	int j;
-	for (j = 0; *a && !isspace(*a) && (j < MAXURISIZE - 2); ++j, ++a)
-		r->uri[j + 1] = *a;
-	r->uri[j + 1] = 0;
-	r->state = ProcessingRequest; /* Mark the request for processing */
-}
-
 /* check listener for new connections and write them into fds and requests  */
 void get_new_connections() {
 	if (fds[0].revents & POLLRDNORM) {
@@ -99,7 +81,6 @@ void get_new_connections() {
 		/* Create and prepend a new Request */
 		Request *nr = create_and_prepend_request(&readingRequests);
 		nr->fd = newfd;
-		nr->state = ReadingRequest;
 		fdToRequest[i] = nr;
 		logprintf(InfoMsg, "connection from somewhere on socket %d", newfd);
 	}
@@ -127,7 +108,7 @@ void check_connections_for_data() {
 				cr = pop_request(cr);
 				prepend_request(&processingRequests, cr);
 				if (starts_with(cr->text, "GET")) // is it HTTP GET?
-					fill_in_request(cr);
+					parsereq(cr);
 				else 
 					; /* send an error for all other requests */
 
@@ -141,8 +122,6 @@ void check_connections_for_data() {
 void process_requests() {
 	Request *cr;
 	for (cr = processingRequests.next; cr; cr = cr->next) {
-		if (cr->state != ProcessingRequest) /* Is the request ready for processing? */
-			continue;
 		if (cr->handle) {
 			if (cr->handle(cr) == Done) {
 				cr = remove_and_free_request(cr);
