@@ -1,18 +1,19 @@
-/* Dissemina
- *
- * Copyright (c) 2008 Alexandru Scvortov
- *
- * This programme is distributed under
- *
- *     The MIT License
- * 
- * See the LICENSE file for details. */
-
 /*
- * drequest.h
- * 		implementation of Request and RequestList
- * 		
- * REQUIRES stdlib.h stdbool.h sys/stat.h dstdio.h
+ * dissemina -- a fast webserver
+ * Copyright (C) 2008  Alexandru Scvortov
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 /* Maximum size, in bytes, or URI */
