@@ -1,18 +1,18 @@
-Dissemina
-=========
+dissemina
+---------
   a fast webserver
 
 The scenario invisioned is this:
-  - Alice has a directory of files she wishes to share with Bob, Carmen, and Dan
-  - but the three are not interested in all the files or even the same files
-  - Bob suggests Alice start a server and make these files public
-  - Alice has no previous experience with webservers, so she wants a
-  webserver that she can use without having to go through pages and
-  pages of documentation
+  1) Alice has a directory of files she wishes to share with Bob, Carmen, and Dan
+  2) but the three are not interested in all the files or even the same files
+  3) so Bob suggests Alice start a server and make these files public
+  4) but Alice has no previous experience with webservers
+  5) so she wants a webserver that she can use without having to go
+  through pages and pages of documentation
 
-This is where Dissemina comes into the picture. Dissemina is drop-in
-webserver written with simplicity and speed in mind. The goal is to make
-a webserver that can be deployed immediatly with NO configuration.
+This is where dissemina comes into the picture. Dissemina is drop-in
+webserver written with simplicity and speed in mind. The goal is 
+a webserver that can be deployed immediatly with little-to-no configuration.
 
 In this case, Alice can just get the sever's executable, put it into
 the directory she wants to make public and run it. Dissemina immediately
@@ -22,17 +22,17 @@ and the others her IP address.
 Feature plan for 0.1:
   * serve static files from the current directory with minimum hustle [done]
   * guess filetype and fill in the Content-Type header correctly [partial]
-  * handle thousands of requests per second well [no]
+  * handle thousands of requests per second well [yes]
   * run on Linux [done]
   * run on Windows [no]
 
 
 License
-=======
+-------
 
 Dissemina is free, but it's not public domain. You can download it
-and you can redistribute it. But the price you pay is that any
-modification you make to the source you must make free.
+and you can redistribute it. But the price is that any modification
+you make, you must make free.
 
 Dissemina is distributed under GPL3. See LICENSE file for details.
 
