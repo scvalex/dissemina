@@ -18,7 +18,7 @@ all: dcheck dissemina
 dissemina: dissemina.o commonpages.o dnet.o dstdio.o
 	$(QUIET_LINK)$(CC) $^ -o $@
 
-dissemina.o: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h
+dissemina.o: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h lex.yy.c
 	$(QUIET_CC)$(CC) -c $(CFLAGS) -DVERSION=\"$(VERSION)\" dissemina.c -o $@
 
 %.o: %.c
@@ -26,6 +26,9 @@ dissemina.o: dissemina.c dstdio.h dstring.h dhandlers.h drequest.h
 
 commonpages.c: Resources/commonpages.c.in
 	$(QUIET_GEN)./drc $< > $@
+
+lex.yy.c: parser.l
+	$(QUIET_GEN)flex $<
 
 tags:
 	$(RM) tags
@@ -52,6 +55,7 @@ clean:
 .PHONY: distclean
 distclean: clean
 	$(RM) $(DRC_GENERATED_FILES)
+	$(RM) *.yy.c *.tab.[c,h]
 
 .PHONY: realclean
 realclean: clean
