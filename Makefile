@@ -5,7 +5,8 @@ VERSION = 0.0.2
 
 CC = gcc
 RM = rm -f
-FIND = find
+LEX = flex
+YACC = bison
 
 QUIET_CC = @echo '    ' CC $@;
 QUIET_LINK = @echo '    ' LINK $@;
@@ -28,7 +29,10 @@ commonpages.c: Resources/commonpages.c.in
 	$(QUIET_GEN)./drc $< > $@
 
 lex.yy.c: parser.l
-	$(QUIET_GEN)flex $<
+	$(QUIET_GEN)$(LEX) $<
+
+parser.tab.%: parser.y
+	$(QUIET_GEN)$(YACC) $<
 
 tags:
 	$(RM) tags
