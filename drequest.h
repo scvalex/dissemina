@@ -27,7 +27,7 @@ struct request_s;
 /* Prototype pattern for RequestHandlers
  * These are functions that are given a request and act on it. (think
  * http_handler or error_handler) */
-typedef int (*RequestHandler)(struct request_s *);
+typedef void (*RequestHandler)(struct request_s *);
 
 /* A simple entry in a dictionary. */
 typedef struct {
@@ -100,8 +100,9 @@ static bool extracthead(char *buf, int *i)
 
 /* Parse a received request extracting its URI into r->uri and its
  * headers into r->headers. */
-void parsereq(Request *r) 
+void parse_request(Request *r) 
 {
+	logprintf(DebugMsg, "parsing request");
 	int i = 0;
 	/* Extract the HTTP method */
 	while ((i < r->len) && (i < 9) && !isspace(r->text[i])) {

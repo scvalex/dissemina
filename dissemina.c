@@ -48,15 +48,10 @@ const char dissemina_version_string[] = VERSION;
 
 int listener; /* fd for listener socket */
 struct pollfd fds[NUM_FDS];
-Request *fdToRequest[NUM_FDS]; /* maps fds[idx] to Requests in readingRequests */
-
-/* This is the global list of requests.
- * It's actually a linked list of requests with the first node as a sentinel
- * (i.e the first node is a Request object, but it's not used) */
-RequestList processingRequests;		/* see drequest.h */
+Request *fdToRequest[NUM_FDS]; /* maps fds[idx] to Requests in requests */
 
 /* The list of requests that are currentrly being read into. */
-RequestList readingRequests;		/* see drequest.h */
+RequestList requests;		/* see drequest.h */
 
 /* The list of mathers used to assing handlers to requests */
 MatcherList matchers;		/* see dhandlers.h */
@@ -81,7 +76,7 @@ void get_new_connections()
 		fds[i].fd = newfd; /* now listening on newfd for data to read; this is used by poll() */
 		fds[i].events = POLLRDNORM;
 		/* Create and prepend a new Request */
-		Request *nr = create_and_prepend_request(&readingRequests);
+		Request *nr = create_and_prepend_request(&requests);
 		nr->fd = newfd;
 		fdToRequest[i] = nr;
 		logprintf(InfoMsg, "connection from somewhere on socket %d", newfd);
@@ -108,33 +103,15 @@ void check_connections_for_data()
 				cr->len += nbytes;
 				if (!ends_with(cr->text, "\r\n\r\n")) /* a HTTP request ends with \r\n\r\n */
 					continue;
-				cr = pop_request(cr);
-				prepend_request(&processingRequests, cr);
 				if (starts_with(cr->text, "GET")) // is it HTTP GET?
-					parsereq(cr);
+					parse_request(cr);
 				else 
 					; /* send an error for all other requests */
-
-				assign_handler(cr);
+				handle(cr);
+				cr = remove_and_free_request(cr);
 				fds[i].fd = -1; /* The fd won't be checked for reads anymore */
 			}
 		}
-}
-
-/* write data to sockets */
-void process_requests() 
-{
-	Request *cr;
-	for (cr = processingRequests.next; cr; cr = cr->next) {
-		if (cr->handle) {
-			if (cr->handle(cr) == Done) {
-				cr = remove_and_free_request(cr);
-			}
-		} else {
-			logprintf(ErrMsg, "null handler encountered");
-			cr = remove_and_free_request(cr);
-		}
-	}
 }
 
 int main(int argc, char *argv[]) 
@@ -151,14 +128,13 @@ int main(int argc, char *argv[])
 	int timeout;
 	for (;;) {
 		timeout = -1; 
-		if (processingRequests.next || envelopes.next)
+		if (envelopes.next)
 			timeout = 0; /* if there's a reqeust ready, timeout immediately */
 		if (poll(fds, NUM_FDS, timeout) == -1)
 			quit_err("poll");
 		
 		get_new_connections();
 		check_connections_for_data();
-		process_requests();
 		process_envelopes();
 	}
 

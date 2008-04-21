@@ -30,6 +30,7 @@ enum DoneNotDone {
 typedef bool (*MatcherFunc)(Request*);
 typedef struct matcher_t {
 	MatcherFunc matches;
+	RequestHandler handle;
 	struct matcher_t *next;
 } Matcher;
 typedef Matcher MatcherList;
@@ -62,17 +63,18 @@ int isdir(char *fp)
 }
 
 /* Prepend a matcher to the specified list */
-void create_and_prepend_matcher(MatcherList *list, MatcherFunc f) 
+void create_and_prepend_matcher(MatcherList *list, MatcherFunc f, RequestHandler rh) 
 {
 	Matcher *r = malloc(sizeof(Matcher));
 	memset(r, 0, sizeof(Matcher));
 	r->matches = f;
+	r->handle = rh;
 	r->next = list->next;
 	list->next = r;
 }
 
 /* Sends out a generic error message. */
-static int general_error_handler(Request *r, char *errcode) 
+static void general_error_handler(Request *r, char *errcode) 
 {
 	logprintf(InfoMsg, "sending %s", errcode);
 
@@ -86,32 +88,29 @@ static int general_error_handler(Request *r, char *errcode)
 	sprintf(msgbody, errorpagetext, errcode, errcode);
 
 	create_and_prepend_string_envelope(r->fd, msghead, msgbody);
-
-	return Done;
 }
 
 /* Send 404 Not Found */
-int error_handler(Request *r) 
+void error_handler(Request *r) 
 {
-	return general_error_handler(r, "404 Not Found");
+	general_error_handler(r, "404 Not Found");
 }
 
 /* Send a 400 Bad Request */
-int bad_request_handler(Request *r) 
+void bad_request_handler(Request *r) 
 {
-	return general_error_handler(r, "400 Bad Request");
+	general_error_handler(r, "400 Bad Request");
 }
 
 /* Match requests r that have r->valid false. */
 bool match_bad_requests(Request *r) 
 {
-	if (!r->valid) 
-		r->handle = bad_request_handler;
+	logprintf(DebugMsg, "trying bad request");
 	return !r->valid;
 }
 
 /* send a list of the files in specified directory */
-int directory_listing_handler(Request *r) 
+void directory_listing_handler(Request *r) 
 {
 	DIR *dp;
 	struct dirent *ep;
@@ -144,27 +143,18 @@ int directory_listing_handler(Request *r)
 		sprintf(msgbody, simplepagetext, r->uri, "Can't list dir\n");
 		create_and_prepend_string_envelope(r->fd, msghead, msgbody);
 	}
-
-	return Done;
 }
 
 int assign_handler(Request*); 
 /* match is succesful if URI is a directory */
 bool match_directory_listings(Request *r) 
 {
-	if (!fileexists(r->uri) || !isdir(r->uri))
+	logprintf(DebugMsg, "trying directory listing");
+	if (!fileexists(r->uri) || !isdir(r->uri)) 
 		return false;
 
 	if (r->uri[strlen(r->uri) - 1] != '/')
 		strcat(r->uri, "/"); /* make sure there's a trailing slash after the dir name */
-	r->handle = directory_listing_handler;
-
-	/* maybe there's an index.xml file to send?  */
-	Request aux = *r;
-	strcat(aux.uri, "/index.xml"); 
-	logprintf(DebugMsg, "match_directory_listing_handler: trying handler of index.xml");
-	if (assign_handler(&aux) == 0) 
-		*r = aux; /* replace the current request with the new one */
 
 	return true;
 }
@@ -179,7 +169,7 @@ const char *FileHandle[FileHandleNum][4] = {
 };
 
 /* Send file r->uri to s */
-int simple_http_handler(Request *r) 
+void simple_http_handler(Request *r) 
 {
 	int fh = 0; /* guess Content-Type from file extension */
 	int i;
@@ -197,39 +187,50 @@ int simple_http_handler(Request *r)
 					 "\r\n", FileHandle[fh][3], dissemina_version_string);
 
 	create_and_prepend_file_envelope(r->fd, msghead, r->uri);	
-
-	return Done;
 }
 
 /* match is succesful if uri is a plain file */
 bool match_simple_http(Request *r) 
 {
-	if (!fileexists(r->uri) || !isnormfile(r->uri))
-		return false; /* not interested */
+	logprintf(DebugMsg, "trying simple http");
+	if (!fileexists(r->uri))
+		return false;
 
-	r->handle = simple_http_handler;
-	return true;
+	if (isdir(r->uri)) {
+		/* maybe there's an index.xml file to send?  */
+		Request aux = *r;
+		strcat(aux.uri, "/index.xml"); 
+		logprintf(DebugMsg, "%s is dir; trying index.xml", r->uri);
+		if (fileexists(aux.uri) && isnormfile(aux.uri)) {
+			*r = aux;
+			return true;
+		}
+	} else if (isnormfile(r->uri))
+		return true;
+
+	return false;
 }
 
 /* set up the basic matchers */
 void init_matchers() 
 {
-	create_and_prepend_matcher(&matchers, match_directory_listings);
-	create_and_prepend_matcher(&matchers, match_simple_http);
-	create_and_prepend_matcher(&matchers, match_bad_requests);
+	create_and_prepend_matcher(&matchers, match_directory_listings, directory_listing_handler);
+	create_and_prepend_matcher(&matchers, match_simple_http, simple_http_handler);
+	create_and_prepend_matcher(&matchers, match_bad_requests, bad_request_handler);
 }
 
-/* NOTE this function might make other modifications to the Request
- * (such as changing the URI) 
- * RETURNS -1 on error; 0 on success */
-int assign_handler(Request *r) 
+/* Given a request, takes action to complete it */
+void handle(Request *r) 
 {
 	Matcher *m;
 	for (m = matchers.next; m; m = m->next)
-		if (m->matches(r))
-			return 0;
-	
-	r->handle = error_handler; /* don't know what to do with this request so send an error */
-	return -1;
+		if (m->matches(r)) {
+			logprintf(DebugMsg, "found");
+			break;
+		}
+	if (m)
+		m->handle(r);
+	else
+		error_handler(r);
 }
 
