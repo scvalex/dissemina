@@ -54,7 +54,8 @@ typedef struct envelope_t {
 typedef Envelope EnvelopeList;
 
 void create_and_prepend_string_envelope(int rec, char *header, char *text);
-void create_and_prepend_file_envelope(int rec, char *header, char *fp);
+void create_and_prepend_file_envelope_uri(int rec, char *header, char *fp);
+void create_and_prepend_file_envelope_file(int rec, char *header, FILE *f);
 
 void process_envelopes();
 

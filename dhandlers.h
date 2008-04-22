@@ -186,7 +186,7 @@ void simple_http_handler(Request *r)
 					 "Server: Dissemina/%s\r\n"
 					 "\r\n", FileHandle[fh][3], dissemina_version_string);
 
-	create_and_prepend_file_envelope(r->fd, msghead, r->uri);	
+	create_and_prepend_file_envelope_uri(r->fd, msghead, r->uri);	
 }
 
 /* match is succesful if uri is a plain file */
@@ -211,11 +211,35 @@ bool match_simple_http(Request *r)
 	return false;
 }
 
+/* call the rest of the URI and send back it's output */
+void call_handler(Request *r) 
+{
+	char *msghead = malloc(sizeof(char) * 1024);
+	sprintf(msghead, "HTTP/1.1 200 OK\r\n"
+					 "Connection: close\r\n"
+					 "Content-Type: text/plain\r\n"
+					 "Server: Dissemina/%s\r\n"
+					 "\r\n", dissemina_version_string);
+
+	char command[256];
+	strcpy(command, r->uri + 7);
+	logprintf(DebugMsg, "calling %s", command);
+	create_and_prepend_file_envelope_file(r->fd, msghead, popen(command, "r"));	
+}
+
+/* matches if URI starts with /call/ */
+bool match_call(Request *r)
+{
+	logprintf(DebugMsg, "trying call handler");
+	return starts_with(r->uri, "./call/");
+}
+
 /* set up the basic matchers */
 void init_matchers() 
 {
 	create_and_prepend_matcher(&matchers, match_directory_listings, directory_listing_handler);
 	create_and_prepend_matcher(&matchers, match_simple_http, simple_http_handler);
+	create_and_prepend_matcher(&matchers, match_call, call_handler);
 	create_and_prepend_matcher(&matchers, match_bad_requests, bad_request_handler);
 }
 

@@ -42,7 +42,7 @@
 /* On which port shall I listen? */
 const int LOCAL_PORT = 6462;
 
-int PrintableMsgs = ErrMsg; /* SEE dstdio.h */
+int PrintableMsgs = DebugMsg + ErrMsg; /* SEE dstdio.h */
 
 const char dissemina_version_string[] = VERSION;
 

@@ -133,9 +133,9 @@ void create_and_prepend_string_envelope(int rec, char *header, char *text)
 	envelopes.next = e;
 }
 
-/* Creates a file envelope with the filepath given and prepends it to
+/* Creates a file envelope with the FILE given and prepends it to
  * the envelopes. */
-void create_and_prepend_file_envelope(int rec, char *header, char *fp) 
+void create_and_prepend_file_envelope_file(int rec, char *header, FILE *f) 
 {
 	Envelope *e = malloc(sizeof(Envelope));
 	memset(e, 0, sizeof(Envelope));
@@ -143,7 +143,7 @@ void create_and_prepend_file_envelope(int rec, char *header, char *fp)
 	e->receiver = rec;
 	e->header = header;
 	e->datatype = DataIsFile;
-	e->filedata = fopen(fp, "rb");
+	e->filedata = f;
 	e->nextchar = header;
 	e->state = SendingHeader;
 
@@ -152,6 +152,13 @@ void create_and_prepend_file_envelope(int rec, char *header, char *fp)
 	if (e->next)
 		e->next->prev = e;
 	envelopes.next = e;
+}
+
+/* Creates a file envelope with the filepath given and prepends it to
+ * the envelopes. */
+void create_and_prepend_file_envelope_uri(int rec, char *header, char *fp) 
+{
+	create_and_prepend_file_envelope_file(rec, header, fopen(fp, "rb"));	
 }
 
 /* Removes an envelope from the list and free()s it */
