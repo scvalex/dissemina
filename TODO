@@ -1,7 +1,12 @@
 BUGS
 ====
 
-NEXT BUG NUMBER: 8
+NEXT BUG NUMBER: 9
+
+Bug 8
+-----
+The way dissemina currently handles sending out of error pages is not
+well thought-out. Rethink it.
 
 Bug 7
 -----

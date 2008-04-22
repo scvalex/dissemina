@@ -224,7 +224,24 @@ void call_handler(Request *r)
 	char command[256];
 	strcpy(command, r->uri + 7);
 	logprintf(DebugMsg, "calling %s", command);
-	create_and_prepend_file_envelope_file(r->fd, msghead, popen(command, "r"));	
+
+	FILE *f;
+	if ((f = popen(command, "r"))) {
+		/*TODO figure out a way to close f with pclose and not
+		 * fclose */
+		char buf[2];
+		fread(buf, 1, 1, f);
+		if (feof(f))
+			goto error;
+		rewind(f);
+		create_and_prepend_file_envelope_file(r->fd, msghead, f);	
+		return;
+	}
+
+error:
+	logprintf(DebugMsg, "call failed");
+	free(msghead);
+	general_error_handler(r, "400 Bad Request");
 }
 
 /* matches if URI starts with /call/ */
