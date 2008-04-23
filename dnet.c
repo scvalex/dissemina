@@ -102,7 +102,8 @@ int accept_connection(int s)
 
 enum DataTypes {
 	DataIsString = 1,
-	DataIsFile
+	DataIsFile,
+	DataIsProc
 };
 
 enum States {
@@ -135,14 +136,14 @@ void create_and_prepend_string_envelope(int rec, char *header, char *text)
 
 /* Creates a file envelope with the FILE given and prepends it to
  * the envelopes. */
-void create_and_prepend_file_envelope_file(int rec, char *header, FILE *f) 
+void create_and_prepend_proc_envelope(int rec, char *header, FILE *f) 
 {
 	Envelope *e = malloc(sizeof(Envelope));
 	memset(e, 0, sizeof(Envelope));
 
 	e->receiver = rec;
 	e->header = header;
-	e->datatype = DataIsFile;
+	e->datatype = DataIsProc;
 	e->filedata = f;
 	e->nextchar = header;
 	e->state = SendingHeader;
@@ -158,7 +159,21 @@ void create_and_prepend_file_envelope_file(int rec, char *header, FILE *f)
  * the envelopes. */
 void create_and_prepend_file_envelope_uri(int rec, char *header, char *fp) 
 {
-	create_and_prepend_file_envelope_file(rec, header, fopen(fp, "rb"));	
+	Envelope *e = malloc(sizeof(Envelope));
+	memset(e, 0, sizeof(Envelope));
+
+	e->receiver = rec;
+	e->header = header;
+	e->datatype = DataIsFile;
+	e->filedata = fopen(fp, "rb");
+	e->nextchar = header;
+	e->state = SendingHeader;
+
+	e->prev = &envelopes;
+	e->next = envelopes.next;
+	if (e->next)
+		e->next->prev = e;
+	envelopes.next = e;
 }
 
 /* Removes an envelope from the list and free()s it */
@@ -176,6 +191,8 @@ static Envelope* remove_envelope(Envelope *e)
 		free(e->stringdata);
 	else if (e->datatype == DataIsFile)
 		fclose(e->filedata);
+	else if (e->datatype == DataIsProc)
+		pclose(e->filedata);
 
 	free(e);
 	return p;
@@ -210,7 +227,7 @@ void process_envelopes()
 					e->nextchar += bs;
 				if (*(e->nextchar) == 0)
 					e = remove_envelope(e);
-			} else if (e->datatype == DataIsFile) {
+			} else if ((e->datatype == DataIsFile) || (e->datatype == DataIsProc)) {
 				char buf[SENDBUFSIZE];
 				int len = fread(buf, 1, 1024, e->filedata);
 				int bs = wrappedsend(e->receiver, buf, len);

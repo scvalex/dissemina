@@ -234,7 +234,7 @@ void call_handler(Request *r)
 		if (feof(f))
 			goto error;
 		rewind(f);
-		create_and_prepend_file_envelope_file(r->fd, msghead, f);	
+		create_and_prepend_proc_envelope(r->fd, msghead, f);	
 		return;
 	}
 
